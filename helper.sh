@@ -364,23 +364,29 @@ case $option in
     # Docker
     1)
         print_info "Container starten..."
-        $COMPOSE up -d
-        print_ok "Container laeuft"
+        if $COMPOSE up -d; then
+            print_ok "Container laeuft"
+        else
+            print_err "Start fehlgeschlagen (siehe Output oben). Abbruch."
+            exit 1
+        fi
         ;;
     11)
         print_info "Container stoppen..."
-        $COMPOSE down
-        print_ok "Container gestoppt"
+        $COMPOSE down && print_ok "Container gestoppt" || print_err "Stop fehlgeschlagen"
         ;;
     12)
         print_info "Image neu bauen..."
-        $COMPOSE build
-        print_ok "Build abgeschlossen"
+        if $COMPOSE build; then
+            print_ok "Build abgeschlossen"
+        else
+            print_err "Build fehlgeschlagen. Folge-Aktionen werden abgebrochen."
+            exit 1
+        fi
         ;;
     13)
         print_info "Container neu starten..."
-        $COMPOSE restart
-        print_ok "Restart fertig"
+        $COMPOSE restart && print_ok "Restart fertig" || { print_err "Restart fehlgeschlagen"; exit 1; }
         ;;
     14)
         print_header "Status"

@@ -29,15 +29,17 @@ RUN apk add --no-cache \
     && apk del --no-cache $PHPIZE_DEPS icu-dev oniguruma-dev libzip-dev sqlite-dev \
     && rm -rf /var/cache/apk/*
 
-# PHP-Konfig (Production)
+# PHP-Konfig (Production).
+# Hinweis: opcache.preload wird bewusst NICHT gesetzt – fuer ein Admin-Panel
+# mit niedriger Last bringt das keinen messbaren Vorteil und macht den
+# composer-install-Step im Build kaputt, weil config/ zu dem Zeitpunkt
+# noch nicht im Container liegt.
 RUN { \
         echo 'opcache.enable=1'; \
         echo 'opcache.enable_cli=1'; \
         echo 'opcache.memory_consumption=128'; \
         echo 'opcache.max_accelerated_files=10000'; \
         echo 'opcache.validate_timestamps=0'; \
-        echo 'opcache.preload=/var/www/html/config/preload.php'; \
-        echo 'opcache.preload_user=www-data'; \
     } > /usr/local/etc/php/conf.d/opcache.ini \
     && { \
         echo 'memory_limit=256M'; \
