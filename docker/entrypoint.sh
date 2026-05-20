@@ -8,20 +8,34 @@ set -e
 
 cd /var/www/html
 
-# Volume-Permission-Check: ein frisch angelegtes Docker-Volume kann je nach
-# Volume-Treiber root:root als Besitzer haben, auch wenn das Image den
+# Volume-Permission-Diagnose: ein frisch angelegtes Docker-Volume kann je
+# nach Volume-Treiber root:root als Besitzer haben, auch wenn das Image den
 # Mount-Point mit 1000:1000 hatte. PDO_SQLite braucht Write auf das
-# Verzeichnis (Journal/WAL-Dateien) – wenn das nicht geht, sind die
-# Folge-Fehler kryptisch ("unable to open database file"). Hier hart pruefen.
-if [ ! -w var/data ]; then
+# Verzeichnis UND die Datei (Journal/WAL/SHM-Files daneben).
+echo "[entrypoint] Diagnose var/data:"
+echo "[entrypoint]   ls -la var/data/:"
+ls -la var/data/ 2>&1 | sed 's/^/[entrypoint]     /'
+echo "[entrypoint]   id: $(id)"
+
+# Harter Write-Test: kann uid 1000 in var/data schreiben?
+if ! touch var/data/.write_test 2>/dev/null; then
     echo "[entrypoint] FEHLER: var/data ist nicht beschreibbar fuer uid $(id -u)."
-    echo "[entrypoint] Volume neu anlegen:"
-    echo "[entrypoint]   docker compose down"
-    echo "[entrypoint]   docker volume rm od-admin_od_admin_data"
-    echo "[entrypoint]   docker compose up -d"
-    ls -la var/data/ 2>&1
+    echo "[entrypoint] Das Volume hat falsche Permissions. Reset:"
+    echo "[entrypoint]   ./helper.sh 17"
     exit 1
 fi
+rm -f var/data/.write_test
+
+# Sqlite-Test: kann uid 1000 eine SQLite-DB anlegen + schreiben?
+if ! sqlite3 var/data/.sqlite_test.db "CREATE TABLE t(x); INSERT INTO t VALUES (1);" 2>/dev/null; then
+    echo "[entrypoint] FEHLER: sqlite3 kann nicht in var/data schreiben."
+    echo "[entrypoint] Vermutlich Permissions auf Subfile-Ebene. Reset:"
+    echo "[entrypoint]   ./helper.sh 17"
+    rm -f var/data/.sqlite_test.db
+    exit 1
+fi
+rm -f var/data/.sqlite_test.db
+echo "[entrypoint]   SQLite-Write-Test OK"
 
 if [ ! -f var/data/app.db ]; then
     echo "[entrypoint] var/data/app.db fehlt – lege SQLite-DB an"

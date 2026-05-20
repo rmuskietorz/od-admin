@@ -79,8 +79,12 @@ COPY docker/nginx.conf /etc/nginx/nginx.conf
 COPY docker/php-fpm.conf /usr/local/etc/php-fpm.d/zz-app.conf
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh \
-    && mkdir -p /run/nginx /var/lib/nginx/tmp /var/lib/nginx/logs \
-    && touch /var/lib/nginx/logs/error.log /var/lib/nginx/logs/access.log \
+    && mkdir -p /run/nginx /var/lib/nginx/tmp /var/log/nginx \
+    # Alpine-nginx hat /var/lib/nginx/logs als compile-time-default und
+    # versucht dort beim Start zu oeffnen, bevor es die conf liest.
+    # Symlink auf den tatsaechlichen Log-Pfad (tmpfs, beschreibbar fuer 1000).
+    && rm -rf /var/lib/nginx/logs \
+    && ln -sf /var/log/nginx /var/lib/nginx/logs \
     && chown -R 1000:1000 /run/nginx /var/lib/nginx /var/log/nginx
 
 EXPOSE 8080
