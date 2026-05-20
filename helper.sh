@@ -363,6 +363,16 @@ case $option in
 
     # Docker
     1)
+        # Sicherstellen, dass das geteilte Netz existiert (wird normalerweise
+        # vom Open-Design-Compose angelegt; falls OD noch nicht laeuft,
+        # legen wir das Netz hier an, damit es spaeter wiederverwendet wird).
+        if ! docker network inspect od-net >/dev/null 2>&1; then
+            print_info "Netzwerk 'od-net' fehlt – wird angelegt..."
+            docker network create od-net >/dev/null \
+                && print_ok "od-net angelegt" \
+                || { print_err "od-net konnte nicht angelegt werden"; exit 1; }
+        fi
+
         print_info "Container starten..."
         if $COMPOSE up -d; then
             print_ok "Container laeuft"
