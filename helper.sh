@@ -30,6 +30,7 @@ _MITEMS=(
   "14:Status / Health"
   "15:Logs (follow)"
   "16:Shell im Container"
+  "17:Frischer Reset (Volume neu anlegen)"
   "G:Setup & Datenbank"
   "2:composer install"
   "21:composer dump-autoload"
@@ -412,6 +413,23 @@ case $option in
         fi
         print_info "Shell im Container..."
         $APP_TTY sh
+        ;;
+    17)
+        print_header "Frischer Reset"
+        echo ""
+        echo -e "  ${YELLOW}Stoppt Container und LOESCHT das od_admin_data Volume."
+        echo -e "  Damit gehen alle User + Audit-Log verloren.${RESET}"
+        read -p "  Fortfahren? (y/n): " CONFIRM
+        if [ "$CONFIRM" != "y" ]; then
+            print_info "Abgebrochen."; continue
+        fi
+        $COMPOSE down
+        docker volume rm od-admin_od_admin_data 2>/dev/null \
+            && print_ok "Volume od-admin_od_admin_data entfernt" \
+            || print_info "Volume war schon weg"
+        print_info "Starte frisch..."
+        $COMPOSE up -d && print_ok "Container laeuft mit frischem Volume" \
+            || { print_err "Start fehlgeschlagen"; exit 1; }
         ;;
 
     # Setup & DB

@@ -8,8 +8,21 @@ set -e
 
 cd /var/www/html
 
-# Volume var/data wird leer angeliefert – sicherstellen, dass die DB-Datei
-# existiert, damit Doctrine sie oeffnen kann.
+# Volume-Permission-Check: ein frisch angelegtes Docker-Volume kann je nach
+# Volume-Treiber root:root als Besitzer haben, auch wenn das Image den
+# Mount-Point mit 1000:1000 hatte. PDO_SQLite braucht Write auf das
+# Verzeichnis (Journal/WAL-Dateien) – wenn das nicht geht, sind die
+# Folge-Fehler kryptisch ("unable to open database file"). Hier hart pruefen.
+if [ ! -w var/data ]; then
+    echo "[entrypoint] FEHLER: var/data ist nicht beschreibbar fuer uid $(id -u)."
+    echo "[entrypoint] Volume neu anlegen:"
+    echo "[entrypoint]   docker compose down"
+    echo "[entrypoint]   docker volume rm od-admin_od_admin_data"
+    echo "[entrypoint]   docker compose up -d"
+    ls -la var/data/ 2>&1
+    exit 1
+fi
+
 if [ ! -f var/data/app.db ]; then
     echo "[entrypoint] var/data/app.db fehlt – lege SQLite-DB an"
     touch var/data/app.db

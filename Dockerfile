@@ -79,7 +79,8 @@ COPY docker/nginx.conf /etc/nginx/nginx.conf
 COPY docker/php-fpm.conf /usr/local/etc/php-fpm.d/zz-app.conf
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh \
-    && mkdir -p /run/nginx /var/lib/nginx/tmp \
+    && mkdir -p /run/nginx /var/lib/nginx/tmp /var/lib/nginx/logs \
+    && touch /var/lib/nginx/logs/error.log /var/lib/nginx/logs/access.log \
     && chown -R 1000:1000 /run/nginx /var/lib/nginx /var/log/nginx
 
 EXPOSE 8080
