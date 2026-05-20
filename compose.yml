@@ -32,6 +32,10 @@ services:
       - /var/cache
       - /var/log/nginx
       - /run/nginx
+      # Symfony schreibt Cache + Logs zur Laufzeit – muss tmpfs sein wenn
+      # der Root-FS read-only ist. uid=1000 damit PHP-FPM reinschreiben kann.
+      - /var/www/html/var/cache:uid=1000,gid=1000,mode=755
+      - /var/www/html/var/log:uid=1000,gid=1000,mode=755
     read_only: true
     cap_drop:
       - ALL

@@ -68,8 +68,11 @@ COPY .env ./.env
 # Cache warmen, Permissions setzen
 RUN mkdir -p var/cache var/log var/data \
     && composer dump-autoload --no-dev --optimize --classmap-authoritative \
-    && APP_ENV=prod APP_DEBUG=0 php bin/console cache:warmup --no-interaction \
     && chown -R 1000:1000 var/ public/
+
+# Hinweis: cache:warmup laeuft NICHT hier sondern beim Container-Start
+# (entrypoint.sh). Grund: var/cache wird zur Laufzeit per tmpfs gemountet
+# wegen read_only:true – ein build-time-Warmup wuerde ueberschrieben.
 
 # nginx-Konfig + Entrypoint
 COPY docker/nginx.conf /etc/nginx/nginx.conf

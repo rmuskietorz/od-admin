@@ -1,23 +1,34 @@
 #!/bin/sh
 set -e
 
-# Erstinitialisierung: SQLite-Datei + Migrations + Cache.
-# Idempotent — laeuft bei jedem Start, macht aber nur Arbeit wenn was fehlt.
+# var/data ist Volume (od_admin_data), var/cache und var/log sind tmpfs
+# (siehe compose.yml). Alles andere ist read-only.
+# Daher KEINE chown-Operationen hier – Permissions sind im Build-Step gesetzt
+# und tmpfs-Mounts werden von Docker mit dem richtigen User bereitgestellt.
 
 cd /var/www/html
 
-mkdir -p var/data var/cache var/log
-chown -R 1000:1000 var/
-
-if [ ! -f var/data.db ]; then
-    echo "[entrypoint] var/data.db fehlt – lege SQLite-DB an"
-    su-exec 1000:1000 touch var/data.db || touch var/data.db
+# Volume var/data wird leer angeliefert – sicherstellen, dass die DB-Datei
+# existiert, damit Doctrine sie oeffnen kann.
+if [ ! -f var/data/app.db ]; then
+    echo "[entrypoint] var/data/app.db fehlt – lege SQLite-DB an"
+    touch var/data/app.db
 fi
 
-# Migrations ausfuehren (no-op wenn nichts ansteht)
-su-exec 1000:1000 php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration 2>/dev/null || \
-    php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration
+# Cache & Logs liegen im tmpfs (frisch bei jedem Start) – warmup hier laufen
+# lassen, weil der build-time-warmup vom tmpfs-Mount ueberschrieben wird.
+echo "[entrypoint] Symfony Cache warmup..."
+php bin/console cache:warmup --no-interaction || {
+    echo "[entrypoint] cache:warmup fehlgeschlagen – Container wird trotzdem gestartet"
+}
 
-# PHP-FPM im Background, nginx im Foreground (PID 1 fuer Signale)
+# Migrations idempotent ausfuehren (no-op wenn nichts ansteht)
+echo "[entrypoint] Doctrine Migrations..."
+php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration || {
+    echo "[entrypoint] Migrations fehlgeschlagen – Container wird trotzdem gestartet"
+}
+
+# PHP-FPM im Hintergrund, nginx im Vordergrund (PID 1 fuer Signale)
+echo "[entrypoint] Starte php-fpm + nginx..."
 php-fpm -D
 exec nginx

@@ -448,7 +448,7 @@ case $option in
         ;;
     31)
         print_header "User-Liste"
-        $APP sqlite3 /var/www/html/var/data/data.db \
+        $APP sqlite3 /var/www/html/var/data/app.db \
             "SELECT username, roles, created_at FROM app_user ORDER BY id;" \
             2>/dev/null || print_err "Fehler beim DB-Zugriff"
         ;;
