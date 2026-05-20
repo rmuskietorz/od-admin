@@ -1,0 +1,24 @@
+parameters:
+    app.od_container_name: '%env(OD_CONTAINER_NAME)%'
+    app.od_upstream_url:   '%env(OD_UPSTREAM_URL)%'
+    app.od_compose_file:   '%env(OD_COMPOSE_FILE)%'
+    app.docker_host:       '%env(DOCKER_HOST)%'
+    app.ttyd_upstream_url: '%env(TTYD_UPSTREAM_URL)%'
+
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    App\:
+        resource: '../src/'
+        exclude:
+            - '../src/DependencyInjection/'
+            - '../src/Entity/'
+            - '../src/Kernel.php'
+
+    App\Service\DockerClient:
+        arguments:
+            $containerName: '%app.od_container_name%'
+            $composeFile:   '%app.od_compose_file%'
+            $dockerHost:    '%app.docker_host%'

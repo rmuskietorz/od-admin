@@ -1,0 +1,14 @@
+.git
+.github
+.gitignore
+.idea
+.vscode
+var/cache
+var/log
+var/data.db
+vendor
+node_modules
+.env.local
+.env.*.local
+*.log
+README.md

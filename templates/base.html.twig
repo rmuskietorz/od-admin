@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}od-admin{% endblock %}</title>
+    <style>
+        :root {
+            --bg: #0d3047;
+            --fg: #dbd6ca;
+            --accent: #1db1a3;
+            --accent2: #287fd9;
+            --err: #e74c3c;
+            --ok: #2ecc71;
+            --border: rgba(255,255,255,0.1);
+        }
+        * { box-sizing: border-box; }
+        html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
+                     font-family: 'Inter', system-ui, sans-serif; line-height: 1.5; }
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+        header.top { display: flex; align-items: center; gap: 24px; padding: 16px 24px;
+                     border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.2); }
+        header.top .brand { font-weight: 700; color: var(--accent); }
+        header.top nav { display: flex; gap: 16px; }
+        header.top .spacer { flex: 1; }
+        button, .btn {
+            background: var(--accent); color: #fff; border: 0; padding: 10px 16px;
+            border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px;
+        }
+        button:hover, .btn:hover { background: #18958a; }
+        button.secondary { background: var(--accent2); }
+        button.danger { background: var(--err); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .card { background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+                border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+        .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px;
+                 font-size: 12px; font-weight: 600; }
+        .badge.ok  { background: var(--ok); color: #000; }
+        .badge.err { background: var(--err); color: #fff; }
+        .badge.warn { background: #f39c12; color: #000; }
+        pre { background: #000; color: #0f0; padding: 12px; border-radius: 6px;
+              overflow: auto; max-height: 500px; font-size: 12px; }
+        .form-input {
+            width: 100%; padding: 10px 12px; border-radius: 6px;
+            border: 1px solid var(--border); background: rgba(0,0,0,0.3);
+            color: var(--fg); font-size: 14px;
+        }
+        label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 13px; }
+        .form-group { margin-bottom: 16px; }
+        .error { color: var(--err); margin-bottom: 12px; }
+    </style>
+    {% block stylesheets %}{% endblock %}
+</head>
+<body>
+{% if app.user %}
+    <header class="top">
+        <div class="brand">od-admin</div>
+        <nav>
+            <a href="{{ path('app_dashboard') }}">Dashboard</a>
+            <a href="{{ path('app_claude_login') }}">Claude Login</a>
+            <a href="{{ path('app_audit') }}">Audit-Log</a>
+            <a href="/" target="_blank">Open Design ↗</a>
+        </nav>
+        <div class="spacer"></div>
+        <div>{{ app.user.userIdentifier }} · <a href="{{ path('app_logout') }}">Logout</a></div>
+    </header>
+{% endif %}
+<main class="container">
+    {% block body %}{% endblock %}
+</main>
+{% block javascripts %}{% endblock %}
+</body>
+</html>

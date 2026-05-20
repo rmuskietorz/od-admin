@@ -1,0 +1,29 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Claude Login · od-admin{% endblock %}
+
+{% block body %}
+    <h1 style="margin-top: 0;">Claude CLI Login</h1>
+
+    <div class="card">
+        <p>
+            Das Terminal unten startet <code>claude setup-token</code> im Open-Design Container.
+            Die ausgegebene URL in einem <strong>neuen Browser-Tab</strong> öffnen, mit deinem
+            Claude Pro/Max Account einloggen, und den zurückgegebenen Code unten ins Terminal einfügen.
+        </p>
+        <p>
+            Credentials werden im Volume <code>claude_home</code> gespeichert und überleben
+            Container-Restarts.
+        </p>
+    </div>
+
+    <div class="card" style="padding: 0; overflow: hidden;">
+        <iframe src="/admin/ttyd/"
+                style="width: 100%; height: 600px; border: 0; background: #000;"
+                title="Claude Login Terminal"></iframe>
+    </div>
+
+    <div style="margin-top: 16px;">
+        <a href="{{ path('app_dashboard') }}" class="btn">Zurück zum Dashboard</a>
+    </div>
+{% endblock %}

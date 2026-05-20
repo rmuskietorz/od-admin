@@ -1,0 +1,24 @@
+framework:
+    secret: '%env(APP_SECRET)%'
+    http_method_override: false
+    handle_all_throwables: true
+
+    trusted_hosts: '%env(default::TRUSTED_HOSTS)%'
+    trusted_proxies: '%env(default::TRUSTED_PROXIES)%'
+    trusted_headers: [ 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-forwarded-port', 'x-forwarded-prefix' ]
+
+    session:
+        handler_id: null
+        cookie_secure: auto
+        cookie_samesite: lax
+        cookie_path: '%env(default::COOKIE_PATH)%'
+        storage_factory_id: session.storage.factory.native
+
+    php_errors:
+        log: true
+
+when@dev:
+    framework:
+        profiler: { only_exceptions: false }
+        session:
+            cookie_secure: false

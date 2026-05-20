@@ -1,0 +1,99 @@
+name: od-admin
+
+# Komplettes Setup: od-admin + ttyd + Open Design + Watchtower.
+# Annahme: dieser Compose laeuft auf dem Server in /opt/od-admin/.
+# Der OD-Compose (.../open-design/deploy/docker-compose.claude-cli.server.yml)
+# wird HIER mitinkludiert, damit alles in einem Netz haengt.
+
+services:
+  od-admin:
+    container_name: od-admin
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+      - .env.local
+    networks:
+      - od-net
+    ports:
+      - "${OD_ADMIN_BIND:-127.0.0.1}:${OD_ADMIN_PORT:-8080}:8080"
+    volumes:
+      # Persistent: SQLite User-DB
+      - od_admin_data:/var/www/html/var/data
+      # Docker-Socket (Read-Write – PHP braucht POST fuer exec/restart)
+      - /var/run/docker.sock:/var/run/docker.sock
+      # OD-Compose-File read-only mit reingeben, damit der DockerClient
+      # 'docker compose -f ... restart' fahren kann.
+      - ${HOST_OD_DEPLOY_DIR:-/opt/open-design/deploy}:/host/open-design:ro
+    tmpfs:
+      - /tmp
+      - /var/cache
+      - /var/log/nginx
+      - /run/nginx
+    read_only: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    user: "1000:1000"
+    mem_limit: 256m
+    pids_limit: 128
+    depends_on:
+      - ttyd
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"  # selbst gebaut, nicht auto-update
+    healthcheck:
+      test:
+        - CMD
+        - sh
+        - -c
+        - "wget -qO- http://127.0.0.1:8080/admin/login >/dev/null || exit 1"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  ttyd:
+    container_name: od-admin-ttyd
+    image: tsl0922/ttyd:latest
+    restart: unless-stopped
+    networks:
+      - od-net
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command:
+      - ttyd
+      - --port=7681
+      - --interface=0.0.0.0
+      # Auth wird durch nginx auth_request davor sichergestellt. ttyd selbst
+      # ist nicht aus dem Internet erreichbar (kein ports:-Mapping).
+      - --writable
+      - docker
+      - exec
+      - -it
+      - -u
+      - open-design
+      - open-design-claude
+      - sh
+      - -c
+      - "claude setup-token || claude /login"
+    mem_limit: 64m
+    pids_limit: 64
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  od-net:
+    name: od-net
+    external: true  # wird vom OD-Compose angelegt; wir haengen uns ran
+
+volumes:
+  od_admin_data:

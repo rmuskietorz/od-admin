@@ -1,0 +1,12 @@
+/.env.local
+/.env.local.php
+/.env.*.local
+/var/
+/vendor/
+/public/bundles/
+/composer.phar
+/phpstan.neon
+.phpunit.result.cache
+.idea/
+.vscode/
+*.log

@@ -1,0 +1,148 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Dashboard · od-admin{% endblock %}
+
+{% block body %}
+    <h1 style="margin-top: 0;">Open Design</h1>
+
+    <div class="card">
+        <h3 style="margin-top: 0;">Status</h3>
+        <div class="grid">
+            <div>
+                <label>Container</label>
+                <div>{{ status.name }}</div>
+            </div>
+            <div>
+                <label>Image</label>
+                <div style="font-size: 12px; word-break: break-all;">{{ status.image }}</div>
+            </div>
+            <div>
+                <label>State</label>
+                <div>
+                    {% if status.running %}
+                        <span class="badge ok">Running</span>
+                    {% else %}
+                        <span class="badge err">Stopped</span>
+                    {% endif %}
+                    <span class="badge {{ status.health == 'healthy' ? 'ok' : (status.health == 'unhealthy' ? 'err' : 'warn') }}">
+                        {{ status.health }}
+                    </span>
+                </div>
+            </div>
+            <div>
+                <label>Started</label>
+                <div style="font-size: 12px;">{{ status.started ?? '–' }}</div>
+            </div>
+        </div>
+
+        <div style="margin-top: 16px;">
+            <button id="btn-status">Aktualisieren</button>
+            <button id="btn-restart" class="secondary">Restart</button>
+            <button id="btn-update" class="secondary">Update (Pull + Up)</button>
+            <button id="btn-logs">Logs anzeigen</button>
+        </div>
+        <pre id="action-out" style="margin-top: 12px; display: none;"></pre>
+    </div>
+
+    <div class="card">
+        <h3 style="margin-top: 0;">Claude CLI</h3>
+        <div id="claude-status">Lade…</div>
+        <div style="margin-top: 12px;">
+            <a href="{{ path('app_claude_login') }}" class="btn">Login öffnen</a>
+            <button id="btn-claude-test" class="secondary">Test-Prompt</button>
+            <button id="btn-claude-logout" class="danger">Logout (Credentials löschen)</button>
+        </div>
+        <pre id="claude-out" style="margin-top: 12px; display: none;"></pre>
+    </div>
+
+    <div class="card" id="logs-card" style="display: none;">
+        <h3 style="margin-top: 0;">Logs (live)</h3>
+        <pre id="logs-pre"></pre>
+        <button id="btn-logs-close">Schließen</button>
+    </div>
+
+    {% block javascripts %}
+    <script>
+        const actionOut = document.getElementById('action-out');
+        const claudeOut = document.getElementById('claude-out');
+
+        function showJson(el, value) {
+            el.style.display = '';
+            el.textContent = JSON.stringify(value, null, 2);
+        }
+
+        async function call(url, method = 'POST') {
+            actionOut.style.display = '';
+            actionOut.textContent = 'läuft …';
+            const r = await fetch(url, { method, headers: { 'Accept': 'application/json' } });
+            const j = await r.json();
+            showJson(actionOut, j);
+            return j;
+        }
+
+        document.getElementById('btn-status').onclick = () => location.reload();
+        document.getElementById('btn-restart').onclick = () => call('{{ path('app_restart') }}');
+        document.getElementById('btn-update').onclick = async () => {
+            if (!confirm('Aktuelles Image pullen und Container neu starten?')) return;
+            await call('{{ path('app_update') }}');
+        };
+
+        function badge(cls, text) {
+            const span = document.createElement('span');
+            span.className = 'badge ' + cls;
+            span.textContent = text;
+            return span;
+        }
+
+        async function refreshClaudeStatus() {
+            const cs = document.getElementById('claude-status');
+            cs.textContent = '';
+            const r = await fetch('{{ path('app_claude_status') }}');
+            const j = await r.json();
+
+            const row1 = document.createElement('div');
+            row1.append('CLI Version: ');
+            const code = document.createElement('code');
+            code.textContent = j.cli_version || 'unbekannt';
+            row1.append(code);
+
+            const row2 = document.createElement('div');
+            row2.append('Credentials: ');
+            row2.append(j.has_credentials ? badge('ok', 'vorhanden') : badge('err', 'fehlt'));
+
+            cs.append(row1, row2);
+        }
+        refreshClaudeStatus();
+
+        document.getElementById('btn-claude-test').onclick = async () => {
+            claudeOut.style.display = '';
+            claudeOut.textContent = 'läuft …';
+            const r = await fetch('{{ path('app_claude_test') }}', { method: 'POST' });
+            showJson(claudeOut, await r.json());
+        };
+        document.getElementById('btn-claude-logout').onclick = async () => {
+            if (!confirm('Credentials wirklich löschen?')) return;
+            await fetch('{{ path('app_claude_logout') }}', { method: 'POST' });
+            refreshClaudeStatus();
+        };
+
+        // ── Logs SSE ────────────────────────────────────────────────────────
+        let logSource = null;
+        document.getElementById('btn-logs').onclick = () => {
+            const card = document.getElementById('logs-card');
+            const pre = document.getElementById('logs-pre');
+            card.style.display = '';
+            pre.textContent = '';
+            logSource = new EventSource('{{ path('app_logs') }}');
+            logSource.onmessage = (e) => {
+                pre.append(e.data + '\n');
+                pre.scrollTop = pre.scrollHeight;
+            };
+        };
+        document.getElementById('btn-logs-close').onclick = () => {
+            if (logSource) { logSource.close(); logSource = null; }
+            document.getElementById('logs-card').style.display = 'none';
+        };
+    </script>
+    {% endblock %}
+{% endblock %}
