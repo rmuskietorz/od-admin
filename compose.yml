@@ -30,8 +30,10 @@ services:
     tmpfs:
       - /tmp
       - /var/cache
-      - /var/log/nginx
-      - /run/nginx
+      # nginx schreibt Logs, Pid, Client-Body-Buffers – braucht uid=1000.
+      - /var/log/nginx:uid=1000,gid=1000,mode=755
+      - /run/nginx:uid=1000,gid=1000,mode=755
+      - /var/lib/nginx/tmp:uid=1000,gid=1000,mode=755
       # Symfony schreibt Cache + Logs zur Laufzeit – muss tmpfs sein wenn
       # der Root-FS read-only ist. uid=1000 damit PHP-FPM reinschreiben kann.
       - /var/www/html/var/cache:uid=1000,gid=1000,mode=755
