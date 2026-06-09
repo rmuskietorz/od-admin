@@ -11,14 +11,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    restart: unless-stopped
+    # Lokal kein Auto-Restart (Default "no"). Auf dem Prod-Server
+    # OD_ADMIN_RESTART=unless-stopped setzen (Shell-Env / systemd / Deploy).
+    restart: ${OD_ADMIN_RESTART:-no}
     env_file:
       - .env
       - .env.local
     networks:
       - od-net
     ports:
-      - "${OD_ADMIN_BIND:-127.0.0.1}:${OD_ADMIN_PORT:-8080}:8080"
+      - "${OD_ADMIN_BIND:-127.0.0.1}:${OD_ADMIN_PORT:-8082}:8080"
     volumes:
       # Persistent: SQLite User-DB
       - od_admin_data:/var/www/html/var/data
@@ -70,7 +72,7 @@ services:
   ttyd:
     container_name: od-admin-ttyd
     image: tsl0922/ttyd:latest
-    restart: unless-stopped
+    restart: ${OD_ADMIN_RESTART:-no}
     networks:
       - od-net
     volumes:

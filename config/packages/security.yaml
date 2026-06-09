@@ -15,13 +15,12 @@ security:
             pattern: ^/(_(profiler|wdt)|css|images|js)/
             security: false
 
-        # Auth-Check Endpoint (nginx subrequest). Liefert 200 wenn eingeloggt,
-        # 401 sonst. Wird vor jedem proxied Request gefragt.
-        auth_check:
-            pattern: ^/_auth_check$
-            stateless: false
-            security: false
-
+        # WICHTIG: /_auth_check hat KEINE eigene Firewall. Es laeuft bewusst
+        # unter der 'admin'-Firewall, damit es denselben Session-Token sieht
+        # wie das Admin-Login. Eine separate Firewall mit security:false hatte
+        # nie einen Auth-Kontext -> isGranted() war immer false -> der nginx
+        # auth_request lieferte immer 401 und der OD-Reverse-Proxy unter / war
+        # fuer niemanden erreichbar. (siehe SecurityController::authCheck)
         admin:
             lazy: true
             provider: app_user_provider

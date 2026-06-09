@@ -9,6 +9,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
+use Symfony\Component\Console\Helper\QuestionHelper;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Question\Question;
@@ -51,6 +52,7 @@ final class CreateUserCommand extends Command
         $q2->setHidden(true);
 
         $helper = $this->getHelper('question');
+        \assert($helper instanceof QuestionHelper);
         $pw1 = $helper->ask($input, $output, $q1);
         $pw2 = $helper->ask($input, $output, $q2);
 

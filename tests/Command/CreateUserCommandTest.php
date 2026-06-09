@@ -20,7 +20,10 @@ final class CreateUserCommandTest extends KernelTestCase
     protected function setUp(): void
     {
         $kernel = self::bootKernel();
-        $container = $kernel->getContainer();
+        // self::getContainer() liefert den Test-Container, der auch private
+        // Services (wie EntityManagerInterface) zugaenglich macht. Der echte
+        // $kernel->getContainer() hat sie wegremoved/inlined.
+        $container = self::getContainer();
 
         /** @var EntityManagerInterface $em */
         $em = $container->get(EntityManagerInterface::class);

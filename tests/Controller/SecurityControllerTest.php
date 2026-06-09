@@ -32,10 +32,36 @@ final class SecurityControllerTest extends WebTestCase
     {
         $client = static::createClient();
         $user = $this->createTestUser($client->getContainer(), 'tester', 'correct-horse-battery-staple');
-        $client->loginUser($user);
+        // Firewall-Name 'admin' ist zwingend: ohne ihn nutzt loginUser() den
+        // Default 'main', der hier nicht existiert -> Token wird nicht erkannt.
+        $client->loginUser($user, 'admin');
 
         $client->request('GET', '/_auth_check');
 
+        self::assertResponseIsSuccessful();
+    }
+
+    /**
+     * Reverse-Proxy-Gate: nginx fragt vor jedem OD-Request `/_auth_check`.
+     * Dieser Test fuehrt den ECHTEN Form-Login durch (setzt das reale
+     * Session-Cookie) und ruft danach `/_auth_check` mit demselben Client auf.
+     * Faengt damit beide realen Bugs, die loginUser() umgeht:
+     *   1. cookie_path=/admin -> Cookie wird fuer /_auth_check nicht gesendet
+     *   2. separate auth_check-Firewall (security:false) -> Session unsichtbar
+     */
+    public function testAuthCheckSucceedsAfterRealFormLogin(): void
+    {
+        $client = static::createClient();
+        $this->createTestUser($client->getContainer(), 'robin', 'correct-horse-battery-staple');
+
+        $client->request('GET', '/admin/login');
+        $client->submitForm('Anmelden', [
+            '_username' => 'robin',
+            '_password' => 'correct-horse-battery-staple',
+        ]);
+        self::assertResponseRedirects('/admin');
+
+        $client->request('GET', '/_auth_check');
         self::assertResponseIsSuccessful();
     }
 
@@ -72,7 +98,9 @@ final class SecurityControllerTest extends WebTestCase
     {
         $client = static::createClient();
         $user = $this->createTestUser($client->getContainer(), 'tester', 'correct-horse-battery-staple');
-        $client->loginUser($user);
+        // Firewall-Name 'admin' ist zwingend: ohne ihn nutzt loginUser() den
+        // Default 'main', der hier nicht existiert -> Token wird nicht erkannt.
+        $client->loginUser($user, 'admin');
 
         $client->request('GET', '/admin/login');
 
@@ -86,10 +114,13 @@ final class SecurityControllerTest extends WebTestCase
         /** @var UserPasswordHasherInterface $hasher */
         $hasher = $container->get(UserPasswordHasherInterface::class);
 
-        // Schema sicherstellen (in-memory SQLite per Test-Env)
+        // Frisches Schema pro Test: dropDatabase() + createSchema() statt
+        // updateSchema(), damit die File-DB nicht ueber Testmethoden hinweg
+        // Zeilen akkumuliert (sonst UNIQUE-Constraint-Kollisionen auf username).
         $tool = new \Doctrine\ORM\Tools\SchemaTool($em);
         $meta = $em->getMetadataFactory()->getAllMetadata();
-        $tool->updateSchema($meta);
+        $tool->dropDatabase();
+        $tool->createSchema($meta);
 
         $user = new User($username, 'placeholder');
         $user->setPassword($hasher->hashPassword($user, $password));

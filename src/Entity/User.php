@@ -48,6 +48,10 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     public function getUserIdentifier(): string
     {
+        // UserInterface::getUserIdentifier() ist als non-empty-string deklariert.
+        // Ein Username ist per DB-Constraint und Anlage-Command nie leer.
+        \assert('' !== $this->username);
+
         return $this->username;
     }
 
