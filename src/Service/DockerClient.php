@@ -127,13 +127,18 @@ final class DockerClient
     {
         $this->stopTokenLogin();
 
+        // Wichtig: die FIFO read-write (<>) offen halten statt mit einem
+        // Hintergrund-`sleep` — letzteres laesst eine Pipe offen, an der
+        // Symfony\Process haengt -> run() blockiert bis Timeout -> 500.
+        // Alle Deskriptoren des detached Prozesses gehen nach /dev/null, damit
+        // der startende Request sofort zurueckkehrt.
         $boot = sprintf(
-            'rm -f %1$s %2$s; mkfifo %2$s; ( sleep 1800 > %2$s & ); '
+            'rm -f %1$s %2$s; mkfifo %2$s; '
             .'setsid script -qfc '
             // Sehr breites PTY, damit die lange OAuth-URL NICHT umbricht.
             .'"stty cols 1000 rows 50 2>/dev/null; '
             .'docker exec -it -u open-design %3$s claude setup-token" '
-            .'%1$s < %2$s > /dev/null 2>&1 &',
+            .'%1$s <> %2$s > /dev/null 2>&1 &',
             self::TOKEN_OUT,
             self::TOKEN_IN,
             $this->containerName,
