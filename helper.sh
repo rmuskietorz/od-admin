@@ -216,7 +216,9 @@ DOCKER_HOST=unix:///var/run/docker.sock
 # Session-Cookie unter / (OD-Proxy liegt auf /, nicht /admin) — siehe DEBT-002.
 COOKIE_PATH=/
 
-TRUSTED_HOSTS=^($domain_esc)\$
+# localhost/127.0.0.1 muessen drin bleiben — sonst lehnt Symfony den
+# Container-Healthcheck (Host 127.0.0.1) mit 400 ab → unhealthy.
+TRUSTED_HOSTS=^($domain_esc|localhost|127\.0\.0\.1)\$
 TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
 EOF
     unset app_secret ttyd_token
