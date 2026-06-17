@@ -472,10 +472,11 @@ _MITEMS=(
   "92:nginx vHost einrichten"
   "93:SSL-Zertifikat (certbot)"
   "G:Deploy & Backup"
-  "7:Backup jetzt ausfuehren"
+  "7:Backup jetzt (alle Volumes sichern)"
   "71:Backup-Liste anzeigen"
   "72:Server-Setup-Doku oeffnen"
   "73:Backup-Cron einrichten (taeglich 03:30)"
+  "74:Volumes wiederherstellen (Restore)"
   "G:Konfiguration"
   "9:.env.local bearbeiten"
   "91:Compose-Konfig anzeigen"
@@ -1019,6 +1020,17 @@ case $option in
             || print_err "crontab-Setzen fehlgeschlagen (als root ausfuehren?)"
         print_info "Aktive Crontab:"
         crontab -l 2>/dev/null | grep 'backup.sh' || true
+        ;;
+    74)
+        print_header "Volumes wiederherstellen (Restore)"
+        echo -e "  ${RED}${BOLD}DESTRUKTIV:${RESET} ueberschreibt aktuelle Volume-Inhalte"
+        echo -e "  (Designs, User-DB, Claude-State) aus einem Backup-Snapshot."
+        _rsscript="$SCRIPT_DIR/deploy/scripts/restore.sh"
+        if [ -x "$_rsscript" ]; then
+            _sudo bash "$_rsscript"
+        else
+            print_err "$_rsscript nicht gefunden/executable"
+        fi
         ;;
 
     # Konfiguration
