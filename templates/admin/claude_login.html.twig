@@ -4,17 +4,29 @@
 
 {% block stylesheets %}
 <style>
-    .term-frame { padding: 0; overflow: hidden; }
-    .term-bar { display: flex; align-items: center; gap: 8px; padding: 11px 16px;
-                background: rgba(0,0,0,0.35); border-bottom: 1px solid var(--border-soft); }
-    .term-bar .dots { display: flex; gap: 7px; }
-    .term-bar .dots i { width: 11px; height: 11px; border-radius: 50%; display: block; }
-    .term-bar .dots i:nth-child(1) { background: #ff5f57; }
-    .term-bar .dots i:nth-child(2) { background: #febc2e; }
-    .term-bar .dots i:nth-child(3) { background: #28c840; }
-    .term-bar .label { font-family: var(--font-mono); font-size: 12px; color: var(--fg-mute);
-                       margin-left: 6px; }
-    .term-frame iframe { width: 100%; height: 600px; border: 0; background: #000; display: block; }
+    .cl-step { display: none; }
+    .cl-step.active { display: block; }
+    .url-box { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+               background: rgba(0,0,0,0.3); border: 1px solid var(--border);
+               border-radius: var(--radius-sm); padding: 12px 14px; margin: 14px 0; }
+    .url-box code { font-family: var(--font-mono); font-size: 12px; color: var(--neutral);
+                    word-break: break-all; flex: 1; min-width: 0; }
+    .cl-status { display: flex; align-items: center; gap: 10px; color: var(--fg-dim);
+                 font-family: var(--font-mono); font-size: 13px; margin-top: 6px; }
+    .spinner { width: 15px; height: 15px; border: 2px solid var(--border-strong);
+               border-top-color: var(--teal); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .cl-success { display: flex; align-items: center; gap: 12px; color: var(--ok);
+                  font-size: 17px; font-weight: 600; }
+    .cl-error { color: var(--err); margin-top: 10px; font-size: 13px; }
+    details.term-fallback { margin-top: 22px; }
+    details.term-fallback > summary { cursor: pointer; color: var(--fg-dim); font-size: 13px;
+                                      font-family: var(--font-mono); list-style: none; padding: 6px 0; }
+    details.term-fallback > summary::-webkit-details-marker { display: none; }
+    details.term-fallback > summary::before { content: "▸ "; color: var(--teal); }
+    details.term-fallback[open] > summary::before { content: "▾ "; }
+    details.term-fallback iframe { width: 100%; height: 460px; border: 1px solid var(--border-soft);
+                                   border-radius: var(--radius-sm); background: #000; margin-top: 12px; }
 </style>
 {% endblock %}
 
@@ -30,23 +42,157 @@
     </div>
 
     <div class="card reveal" style="animation-delay:.06s">
-        <div class="card-title">So geht's</div>
-        <ol class="steps">
-            <li>Im Terminal unten startet automatisch <strong>claude setup-token</strong> und zeigt eine URL.</li>
-            <li>URL in einem <strong>neuen Browser-Tab</strong> öffnen und mit deinem Claude-Account autorisieren.</li>
-            <li>Den zurückgegebenen <strong>Code</strong> kopieren und unten ins Terminal einfügen.</li>
-        </ol>
-    </div>
+        <div class="card-title">Anmeldung</div>
 
-    <div class="card term-frame reveal" style="animation-delay:.12s">
-        <div class="term-bar">
-            <span class="dots"><i></i><i></i><i></i></span>
-            <span class="label">claude@open-design-claude — setup-token</span>
+        {# Schritt 0: Start #}
+        <div class="cl-step active" id="step-start">
+            <p class="muted" style="margin-top:0;">
+                Klick auf „Login starten" — od-admin startet den Login-Vorgang und holt die
+                Autorisierungs-URL automatisch (kein Terminal-Kopieren nötig).
+            </p>
+            <button id="btn-start">Login starten</button>
+            <div class="cl-status" id="start-status" style="display:none;">
+                <span class="spinner"></span><span>Starte Login & warte auf URL…</span>
+            </div>
+            <div class="cl-error" id="start-error" style="display:none;"></div>
         </div>
-        <iframe src="/admin/ttyd/" title="Claude Login Terminal"></iframe>
+
+        {# Schritt 1+2: URL + Code #}
+        <div class="cl-step" id="step-auth">
+            <ol class="steps" style="margin-bottom: 18px;">
+                <li><strong>Autorisieren:</strong> Button öffnet die Claude-Anmeldung in einem neuen Tab.</li>
+                <li><strong>Code einfügen:</strong> den dort angezeigten Code unten eintragen und bestätigen.</li>
+            </ol>
+
+            <div class="url-box">
+                <code id="auth-url"></code>
+                <a id="auth-link" href="#" target="_blank" rel="noopener" class="btn">Autorisieren ↗</a>
+            </div>
+
+            <div class="form-group" style="margin-top: 16px;">
+                <label for="auth-code">Code aus der Claude-Anmeldung</label>
+                <input type="text" id="auth-code" class="form-input" autocomplete="off"
+                       placeholder="hier einfügen…" spellcheck="false">
+            </div>
+            <div class="btn-row">
+                <button id="btn-submit">Bestätigen</button>
+                <button id="btn-cancel" class="ghost">Abbrechen</button>
+            </div>
+            <div class="cl-status" id="submit-status" style="display:none;">
+                <span class="spinner"></span><span>Prüfe Anmeldung…</span>
+            </div>
+            <div class="cl-error" id="submit-error" style="display:none;"></div>
+        </div>
+
+        {# Schritt 3: Erfolg #}
+        <div class="cl-step" id="step-done">
+            <div class="cl-success">✓ Angemeldet — Credentials gespeichert.</div>
+            <p class="muted">Du kannst Claude jetzt nutzen. Test im Dashboard via „Test-Prompt".</p>
+            <div class="btn-row">
+                <a href="{{ path('app_dashboard') }}" class="btn">Zum Dashboard</a>
+            </div>
+        </div>
+
+        {# Fallback: das alte Terminal, falls der Button-Flow mal klemmt #}
+        <details class="term-fallback">
+            <summary>Alternative: Terminal verwenden</summary>
+            <iframe src="/admin/ttyd/" title="Claude Login Terminal"></iframe>
+        </details>
     </div>
 
     <div class="btn-row">
         <a href="{{ path('app_dashboard') }}" class="btn ghost">← Zurück zum Dashboard</a>
     </div>
+
+    {% block javascripts %}
+    <script>
+        const show = (id) => {
+            document.querySelectorAll('.cl-step').forEach(s => s.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        };
+        const el = (id) => document.getElementById(id);
+        const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+        const startPost  = '{{ path('app_claude_login_start') }}';
+        const pollGet    = '{{ path('app_claude_login_poll') }}';
+        const submitPost = '{{ path('app_claude_login_submit') }}';
+        const cancelPost = '{{ path('app_claude_login_cancel') }}';
+
+        async function poll() {
+            const r = await fetch(pollGet, { headers: { 'Accept': 'application/json' } });
+            return r.json();
+        }
+
+        function toAuth(url) {
+            el('auth-url').textContent = url;
+            el('auth-link').href = url;
+            show('step-auth');
+            el('auth-code').focus();
+        }
+
+        el('btn-start').onclick = async () => {
+            el('btn-start').disabled = true;
+            el('start-error').style.display = 'none';
+            el('start-status').style.display = 'flex';
+            try {
+                const r = await fetch(startPost, { method: 'POST', headers: { 'Accept': 'application/json' } });
+                const j = await r.json();
+                if (j.has_credentials) { show('step-done'); return; }
+
+                // Auf die URL pollen (max ~45s).
+                for (let i = 0; i < 30; i++) {
+                    await sleep(1500);
+                    const p = await poll();
+                    if (p.has_credentials) { show('step-done'); return; }
+                    if (p.url) { toAuth(p.url); return; }
+                }
+                throw new Error('Zeitüberschreitung — keine URL erhalten. Versuch es erneut oder nutze das Terminal unten.');
+            } catch (e) {
+                el('start-error').textContent = e.message || 'Fehler beim Start.';
+                el('start-error').style.display = 'block';
+                el('btn-start').disabled = false;
+            } finally {
+                el('start-status').style.display = 'none';
+            }
+        };
+
+        el('btn-submit').onclick = async () => {
+            const code = el('auth-code').value.trim();
+            el('submit-error').style.display = 'none';
+            if (!code) { el('submit-error').textContent = 'Bitte den Code einfügen.'; el('submit-error').style.display = 'block'; return; }
+            el('btn-submit').disabled = true;
+            el('submit-status').style.display = 'flex';
+            try {
+                const r = await fetch(submitPost, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ code }),
+                });
+                if (!r.ok) {
+                    const j = await r.json().catch(() => ({}));
+                    throw new Error(j.error || 'Code abgelehnt.');
+                }
+                // Auf Credentials warten (max ~30s).
+                for (let i = 0; i < 20; i++) {
+                    await sleep(1500);
+                    const p = await poll();
+                    if (p.has_credentials) { show('step-done'); return; }
+                }
+                throw new Error('Code gesendet, aber keine Credentials erkannt. Stimmt der Code? Sonst erneut starten.');
+            } catch (e) {
+                el('submit-error').textContent = e.message;
+                el('submit-error').style.display = 'block';
+                el('btn-submit').disabled = false;
+            } finally {
+                el('submit-status').style.display = 'none';
+            }
+        };
+
+        el('btn-cancel').onclick = async () => {
+            await fetch(cancelPost, { method: 'POST' }).catch(() => {});
+            el('btn-start').disabled = false;
+            show('step-start');
+        };
+    </script>
+    {% endblock %}
 {% endblock %}

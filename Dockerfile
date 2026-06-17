@@ -17,6 +17,7 @@ RUN apk add --no-cache \
         curl \
         docker-cli \
         docker-cli-compose \
+        util-linux-misc \
         sqlite \
         sqlite-libs \
         sqlite-dev \

@@ -114,6 +114,72 @@ final class DockerClient
         return $this->runProcess($full, $timeoutSec);
     }
 
+    // ── Token-Login-Bridge (Button-Flow) ────────────────────────────────────
+    // `claude setup-token` braucht ein TTY. od-admin oeffnet via `script` ein
+    // Pseudo-Terminal, faehrt darin `docker exec -it ... claude setup-token`,
+    // loggt die Ausgabe (inkl. OAuth-URL) in TOKEN_OUT und nimmt den Code ueber
+    // die FIFO TOKEN_IN entgegen. Der Prozess laeuft detached (setsid) und
+    // ueberlebt damit den HTTP-Request, der ihn startet.
+    private const TOKEN_OUT = '/tmp/od_token_login.out';
+    private const TOKEN_IN  = '/tmp/od_token_login.in';
+
+    public function startTokenLogin(): void
+    {
+        $this->stopTokenLogin();
+
+        $boot = sprintf(
+            'rm -f %1$s %2$s; mkfifo %2$s; ( sleep 1800 > %2$s & ); '
+            .'setsid script -qfc '
+            .'"stty cols 220 rows 50 2>/dev/null; '
+            .'docker exec -it -u open-design %3$s claude setup-token" '
+            .'%1$s < %2$s > /dev/null 2>&1 &',
+            self::TOKEN_OUT,
+            self::TOKEN_IN,
+            $this->containerName,
+        );
+
+        $proc = new Process(['sh', '-c', $boot], env: $this->processEnv());
+        $proc->setTimeout(15.0);
+        $proc->run();
+    }
+
+    public function readTokenLoginOutput(): string
+    {
+        $proc = new Process(
+            ['sh', '-c', sprintf('cat %s 2>/dev/null || true', self::TOKEN_OUT)],
+            env: $this->processEnv(),
+        );
+        $proc->setTimeout(5.0);
+        $proc->run();
+
+        return $proc->getOutput();
+    }
+
+    public function submitTokenCode(string $code): void
+    {
+        // Code via stdin der FIFO uebergeben – keine Shell-Interpolation.
+        $proc = new Process(
+            ['sh', '-c', sprintf('cat >> %s', self::TOKEN_IN)],
+            env: $this->processEnv(),
+        );
+        $proc->setTimeout(5.0);
+        $proc->setInput(trim($code)."\n");
+        $proc->run();
+    }
+
+    public function stopTokenLogin(): void
+    {
+        $proc = new Process(
+            ['sh', '-c', sprintf('pkill -f "claude setup-token" 2>/dev/null; rm -f %s %s; true', self::TOKEN_OUT, self::TOKEN_IN)],
+            env: $this->processEnv(),
+        );
+        $proc->setTimeout(5.0);
+        $proc->run();
+
+        // Eine evtl. im OD-Container haengende Session ebenfalls beenden.
+        $this->runInContainer(['pkill', '-f', 'setup-token'], timeoutSec: 5)->run();
+    }
+
     /**
      * Logs-Tail als Process (callable mit Output-Callback fuer SSE).
      */
