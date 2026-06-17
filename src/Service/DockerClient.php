@@ -130,7 +130,8 @@ final class DockerClient
         $boot = sprintf(
             'rm -f %1$s %2$s; mkfifo %2$s; ( sleep 1800 > %2$s & ); '
             .'setsid script -qfc '
-            .'"stty cols 220 rows 50 2>/dev/null; '
+            // Sehr breites PTY, damit die lange OAuth-URL NICHT umbricht.
+            .'"stty cols 1000 rows 50 2>/dev/null; '
             .'docker exec -it -u open-design %3$s claude setup-token" '
             .'%1$s < %2$s > /dev/null 2>&1 &',
             self::TOKEN_OUT,

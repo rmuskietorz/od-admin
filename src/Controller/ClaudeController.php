@@ -150,6 +150,9 @@ final class ClaudeController extends AbstractController
     private function extractUrl(string $raw): ?string
     {
         $clean = $this->cleanAnsi($raw);
+        // Hart umgebrochene Zeilen (PTY-Zeilenumbruch mitten in der URL) wieder
+        // zusammenfuegen: ein \n zwischen zwei Nicht-Whitespace-Zeichen entfernen.
+        $clean = preg_replace('/([^\s])\n(?=[^\s])/', '$1', $clean) ?? $clean;
 
         if (preg_match('#https?://[^\s"\'<>\x00-\x1f]+#', $clean, $m)) {
             return rtrim($m[0], '.,)');
