@@ -65,6 +65,7 @@ _MITEMS=(
   "G:Konfiguration"
   "9:.env.local bearbeiten"
   "91:Compose-Konfig anzeigen"
+  "92:Server-Ersteinrichtung (setup.sh)"
   "99:Container + Volumes loeschen (DESTRUKTIV)"
 )
 
@@ -582,6 +583,14 @@ case $option in
         ;;
     91)
         $COMPOSE config
+        ;;
+    92)
+        print_header "Server-Ersteinrichtung"
+        if [ -x "$SCRIPT_DIR/setup.sh" ]; then
+            bash "$SCRIPT_DIR/setup.sh"
+        else
+            print_err "setup.sh nicht gefunden / nicht executable"
+        fi
         ;;
     99)
         print_header "Container + Volumes loeschen"
