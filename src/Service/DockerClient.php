@@ -175,14 +175,19 @@ final class DockerClient
 
     public function stopTokenLogin(): void
     {
+        // `pkill -x script` trifft NUR den PTY-Wrapper (Prozessname "script"),
+        // nicht die ausfuehrende sh. Ein `pkill -f "...setup-token"` wuerde die
+        // eigene Wrapper-Shell mittreffen (Pattern steht in deren Cmdline) und
+        // sie per SIGTERM killen -> ProcessSignaledException -> 500.
         $proc = new Process(
-            ['sh', '-c', sprintf('pkill -f "claude setup-token" 2>/dev/null; rm -f %s %s; true', self::TOKEN_OUT, self::TOKEN_IN)],
+            ['sh', '-c', sprintf('pkill -x script 2>/dev/null; rm -f %s %s; true', self::TOKEN_OUT, self::TOKEN_IN)],
             env: $this->processEnv(),
         );
         $proc->setTimeout(5.0);
         $proc->run();
 
-        // Eine evtl. im OD-Container haengende Session ebenfalls beenden.
+        // Eine evtl. im OD-Container haengende Session ebenfalls beenden (pkill
+        // laeuft hier direkt, ohne sh-Wrapper -> trifft sich nicht selbst).
         $this->runInContainer(['pkill', '-f', 'setup-token'], timeoutSec: 5)->run();
     }
 
