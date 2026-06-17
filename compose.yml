@@ -96,12 +96,17 @@ services:
       - docker
       - exec
       - -it
+      - -e
+      - TERM=xterm-256color
       - -u
       - open-design
       - open-design-claude
-      - sh
-      - -c
-      - "claude setup-token || claude /login"
+      - bash
+      - -lc
+      # Login starten; danach IMMER in eine Shell fallen (nie schwarz/tot).
+      # So ist sichtbar, ob ttyd rendert, und 'claude setup-token' ist
+      # jederzeit erneut aufrufbar.
+      - "clear; claude setup-token || claude /login || true; echo; echo '── claude setup-token zum Wiederholen eintippen ──'; exec bash -l"
     mem_limit: 64m
     pids_limit: 64
     security_opt:
