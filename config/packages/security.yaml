@@ -36,7 +36,10 @@ security:
             remember_me:
                 secret: '%kernel.secret%'
                 lifetime: 604800   # 1 Woche
-                path: /admin
+                # Pfad / (nicht /admin): das nginx-Auth-Gate schuetzt auch den
+                # OD-Proxy unter /, dessen auth_request via remember-me bestehen
+                # koennen muss -> Cookie muss fuer / mitgesendet werden.
+                path: /
             # Brute-Force-Schutz: nach 5 Fehlversuchen pro IP+Username 1 min
             # sperren, dann Token-Bucket-Backoff. Symfony 7 built-in.
             login_throttling:
