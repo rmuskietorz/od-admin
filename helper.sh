@@ -473,6 +473,7 @@ _MITEMS=(
   "51:Fehlgeschlagene Logins (heute)"
   "52:Audit purgen (90 Tage)"
   "53:fail2ban Status (Host)"
+  "54:fail2ban aktivieren (Configs + restart)"
   "G:Open Design Steuerung"
   "6:OD-Status (via DockerClient)"
   "61:OD restart"
@@ -960,9 +961,34 @@ case $option in
         print_header "fail2ban Status (Host-Befehl)"
         if command -v fail2ban-client >/dev/null 2>&1; then
             sudo fail2ban-client status od-admin 2>/dev/null \
-                || print_info "Jail 'od-admin' nicht aktiv – siehe deploy/SERVER.md"
+                || print_info "Jail 'od-admin' nicht aktiv – siehe Punkt 54."
         else
-            print_info "fail2ban-client nicht installiert. Siehe deploy/SERVER.md Schritt 5."
+            print_info "fail2ban-client nicht installiert. Siehe Punkt 54."
+        fi
+        ;;
+    54)
+        print_header "fail2ban aktivieren"
+        if ! command -v fail2ban-client >/dev/null 2>&1; then
+            if confirm "fail2ban ist nicht installiert. Jetzt via apt installieren?"; then
+                _sudo apt update && _sudo apt install -y fail2ban
+            else
+                print_info "Abgebrochen."; continue
+            fi
+        fi
+        _sudo cp "$SCRIPT_DIR/deploy/fail2ban/od-admin.filter.conf" /etc/fail2ban/filter.d/od-admin.conf \
+            && _sudo cp "$SCRIPT_DIR/deploy/fail2ban/od-admin.jail.conf" /etc/fail2ban/jail.d/od-admin.conf \
+            && print_ok "Configs nach /etc/fail2ban/ kopiert" \
+            || { print_err "Kopieren fehlgeschlagen (root noetig?)"; continue; }
+        if [ ! -f /var/log/nginx/od-admin.access.log ]; then
+            print_info "Hinweis: /var/log/nginx/od-admin.access.log fehlt noch – entsteht beim ersten Zugriff ueber den vHost."
+        fi
+        _sudo systemctl enable fail2ban >/dev/null 2>&1 || true
+        if _sudo systemctl restart fail2ban; then
+            print_ok "fail2ban neu gestartet. Status:"
+            _sudo fail2ban-client status od-admin 2>/dev/null \
+                || print_info "Jail meldet sich, sobald der Log Eintraege hat."
+        else
+            print_err "fail2ban-Restart fehlgeschlagen – 'journalctl -u fail2ban' pruefen."
         fi
         ;;
 
