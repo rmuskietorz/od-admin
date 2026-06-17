@@ -113,10 +113,11 @@
         const el = (id) => document.getElementById(id);
         const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-        const startPost  = '{{ path('app_claude_login_start') }}';
-        const pollGet    = '{{ path('app_claude_login_poll') }}';
-        const submitPost = '{{ path('app_claude_login_submit') }}';
-        const cancelPost = '{{ path('app_claude_login_cancel') }}';
+        const startPost    = '{{ path('app_claude_login_start') }}';
+        const pollGet      = '{{ path('app_claude_login_poll') }}';
+        const submitPost   = '{{ path('app_claude_login_submit') }}';
+        const finalizePost = '{{ path('app_claude_login_finalize') }}';
+        const cancelPost   = '{{ path('app_claude_login_cancel') }}';
 
         async function poll() {
             const r = await fetch(pollGet, { headers: { 'Accept': 'application/json' } });
@@ -127,6 +128,9 @@
             el('auth-url').textContent = url;
             el('auth-link').href = url;
             show('step-auth');
+            // Direkt versuchen, die Autorisierung im neuen Tab zu oeffnen.
+            // Popup-Blocker koennen das verhindern -> der Button bleibt als Fallback.
+            try { window.open(url, '_blank', 'noopener'); } catch (e) {}
             el('auth-code').focus();
         }
 
@@ -143,7 +147,6 @@
                 for (let i = 0; i < 30; i++) {
                     await sleep(1500);
                     const p = await poll();
-                    if (p.has_credentials) { show('step-done'); return; }
                     if (p.url) { toAuth(p.url); return; }
                 }
                 throw new Error('Zeitüberschreitung — keine URL erhalten. Versuch es erneut oder nutze das Terminal unten.');
@@ -172,13 +175,23 @@
                     const j = await r.json().catch(() => ({}));
                     throw new Error(j.error || 'Code abgelehnt.');
                 }
-                // Auf Credentials warten (max ~30s).
+                // Warten, bis setup-token den Token erzeugt hat (max ~30s).
+                let ready = false;
                 for (let i = 0; i < 20; i++) {
                     await sleep(1500);
                     const p = await poll();
-                    if (p.has_credentials) { show('step-done'); return; }
+                    if (p.token_ready) { ready = true; break; }
                 }
-                throw new Error('Code gesendet, aber keine Credentials erkannt. Stimmt der Code? Sonst erneut starten.');
+                if (!ready) {
+                    throw new Error('Code gesendet, aber kein Token erzeugt. Stimmt der Code? Sonst erneut starten.');
+                }
+                // Token speichern + OD-Container neu starten (kann ~15s dauern).
+                el('submit-status').querySelector('span:last-child').textContent =
+                    'Token speichern & Open Design neu starten…';
+                const fr = await fetch(finalizePost, { method: 'POST', headers: { 'Accept': 'application/json' } });
+                const fj = await fr.json();
+                if (fj.ok && fj.has_credentials) { show('step-done'); return; }
+                throw new Error(fj.error || 'Token konnte nicht aktiviert werden.');
             } catch (e) {
                 el('submit-error').textContent = e.message;
                 el('submit-error').style.display = 'block';

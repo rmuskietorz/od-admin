@@ -26,9 +26,11 @@ services:
       - od_admin_data:/var/www/html/var/data
       # Docker-Socket (Read-Write – PHP braucht POST fuer exec/restart)
       - /var/run/docker.sock:/var/run/docker.sock
-      # OD-Compose-File read-only mit reingeben, damit der DockerClient
-      # 'docker compose -f ... restart' fahren kann.
-      - ${HOST_OD_DEPLOY_DIR:-/opt/open-design/deploy}:/host/open-design:ro
+      # OD-Deploy-Verzeichnis reingeben, damit der DockerClient
+      # 'docker compose -f ... up/restart' fahren UND den OAuth-Token in
+      # .env.claude-cli schreiben kann (rw). od-admin hat ueber den Socket
+      # ohnehin volle Docker-Kontrolle, daher kein zusaetzliches Risiko.
+      - ${HOST_OD_DEPLOY_DIR:-/opt/open-design/deploy}:/host/open-design:rw
     tmpfs:
       - /tmp
       - /var/cache

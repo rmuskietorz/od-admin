@@ -217,14 +217,89 @@ final class DockerClient
         ], null);
     }
 
+    private function deployDir(): string
+    {
+        return \dirname($this->composeFile);
+    }
+
+    private function envFilePath(): string
+    {
+        return $this->deployDir().'/.env.claude-cli';
+    }
+
     /**
      * @param list<string> $args
      */
     private function runCompose(array $args): Process
     {
-        $cmd = ['docker', 'compose', '--file', $this->composeFile, ...$args];
+        $cmd = ['docker', 'compose', '--file', $this->composeFile];
+        $envFile = $this->envFilePath();
+        if (is_file($envFile)) {
+            // Sonst werden ${...}-Variablen (Image, OAuth-Token) beim up/pull
+            // nicht aufgeloest.
+            $cmd[] = '--env-file';
+            $cmd[] = $envFile;
+        }
+        $cmd = [...$cmd, ...$args];
 
         return $this->runProcess($cmd, 300);
+    }
+
+    // ── Subscription-OAuth-Token (aus `claude setup-token`) ──────────────────
+
+    /** Token aus der setup-token-Ausgabe ziehen (Format sk-ant-oat01-...). */
+    public function extractOauthToken(string $raw): ?string
+    {
+        if (preg_match('/sk-ant-oat01-[A-Za-z0-9_-]+/', $raw, $m)) {
+            return $m[0];
+        }
+
+        return null;
+    }
+
+    /** True, wenn der OD-Container CLAUDE_CODE_OAUTH_TOKEN gesetzt hat. */
+    public function hasOauthToken(): bool
+    {
+        $proc = $this->runInContainer(['printenv', 'CLAUDE_CODE_OAUTH_TOKEN'], timeoutSec: 5);
+        $proc->run();
+
+        return '' !== trim($proc->getOutput());
+    }
+
+    /**
+     * Token in .env.claude-cli upserten und OD-Container neu erzeugen, damit
+     * CLAUDE_CODE_OAUTH_TOKEN in dessen Env landet. $token ist auf
+     * sk-ant-oat01-[A-Za-z0-9_-]+ validiert -> keine Shell-Sonderzeichen.
+     */
+    public function persistOauthToken(string $token): Process
+    {
+        $this->writeEnvToken($token);
+
+        return $this->up();
+    }
+
+    /** Token aus .env.claude-cli entfernen und OD-Container neu erzeugen. */
+    public function clearOauthToken(): Process
+    {
+        $this->writeEnvToken(null);
+
+        return $this->up();
+    }
+
+    private function writeEnvToken(?string $token): void
+    {
+        $env = $this->envFilePath();
+        $script = sprintf(
+            'touch %1$s; grep -v "^CLAUDE_CODE_OAUTH_TOKEN=" %1$s > %1$s.tmp 2>/dev/null || true; mv %1$s.tmp %1$s',
+            $env,
+        );
+        if (null !== $token) {
+            $script .= sprintf('; printf "CLAUDE_CODE_OAUTH_TOKEN=%%s\n" "%s" >> %s', $token, $env);
+        }
+
+        $proc = new Process(['sh', '-c', $script], env: $this->processEnv());
+        $proc->setTimeout(10.0);
+        $proc->mustRun();
     }
 
     /**

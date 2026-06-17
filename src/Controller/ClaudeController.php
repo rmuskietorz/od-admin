@@ -16,8 +16,6 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 #[Route(path: '/admin/claude', name: 'app_claude_')]
 final class ClaudeController extends AbstractController
 {
-    private const CREDENTIALS_FILE = '/home/open-design/.claude/.credentials.json';
-
     public function __construct(private readonly DockerClient $docker)
     {
     }
@@ -35,7 +33,7 @@ final class ClaudeController extends AbstractController
         $verProc->run();
 
         return new JsonResponse([
-            'has_credentials' => $this->hasCredentials(),
+            'has_credentials' => $this->docker->hasOauthToken(),
             'cli_version'     => trim($verProc->getOutput()),
         ]);
     }
@@ -43,14 +41,13 @@ final class ClaudeController extends AbstractController
     // ── Button-Login-Flow ────────────────────────────────────────────────────
 
     /**
-     * Startet `claude setup-token` im OD-Container ueber ein PTY (siehe
-     * DockerClient). Liefert sofort zurueck; das Frontend pollt dann /login/poll
-     * auf die OAuth-URL.
+     * Startet `claude setup-token` im OD-Container ueber ein PTY. Liefert sofort
+     * zurueck; das Frontend pollt /login/poll auf die OAuth-URL.
      */
     #[Route(path: '/login/start', name: 'login_start', methods: ['POST'])]
     public function loginStart(): JsonResponse
     {
-        if ($this->hasCredentials()) {
+        if ($this->docker->hasOauthToken()) {
             return new JsonResponse(['status' => 'already', 'has_credentials' => true]);
         }
 
@@ -60,21 +57,21 @@ final class ClaudeController extends AbstractController
     }
 
     /**
-     * Pollt den Login-Zustand: liefert die OAuth-URL (sobald sichtbar) und ob
-     * die Credentials bereits geschrieben wurden.
+     * Pollt: liefert die OAuth-URL (sobald sichtbar) und ob der setup-token
+     * bereits einen Token erzeugt hat (nach Code-Eingabe).
      */
     #[Route(path: '/login/poll', name: 'login_poll', methods: ['GET'])]
     public function loginPoll(): JsonResponse
     {
+        $out = $this->docker->readTokenLoginOutput();
+
         return new JsonResponse([
-            'url'             => $this->extractUrl($this->docker->readTokenLoginOutput()),
-            'has_credentials' => $this->hasCredentials(),
+            'url'         => $this->extractUrl($out),
+            'token_ready' => null !== $this->docker->extractOauthToken($out),
         ]);
     }
 
-    /**
-     * Schreibt den vom Nutzer eingefuegten Code in den laufenden setup-token.
-     */
+    /** Schreibt den vom Nutzer eingefuegten Code in den laufenden setup-token. */
     #[Route(path: '/login/submit', name: 'login_submit', methods: ['POST'])]
     public function loginSubmit(Request $request): JsonResponse
     {
@@ -89,6 +86,32 @@ final class ClaudeController extends AbstractController
         $this->docker->submitTokenCode($code);
 
         return new JsonResponse(['ok' => true]);
+    }
+
+    /**
+     * Schliesst den Login ab: Token aus der Ausgabe ziehen, in .env.claude-cli
+     * schreiben und den OD-Container neu erzeugen, damit er greift.
+     */
+    #[Route(path: '/login/finalize', name: 'login_finalize', methods: ['POST'])]
+    public function loginFinalize(): JsonResponse
+    {
+        $token = $this->docker->extractOauthToken($this->docker->readTokenLoginOutput());
+
+        if (null === $token) {
+            $tail = mb_substr($this->cleanAnsi($this->docker->readTokenLoginOutput()), -400);
+
+            return new JsonResponse(['ok' => false, 'error' => 'Kein Token erkannt.', 'output' => $tail], 200);
+        }
+
+        $proc = $this->docker->persistOauthToken($token);
+        $proc->run();
+        $this->docker->stopTokenLogin();
+
+        return new JsonResponse([
+            'ok'              => $proc->isSuccessful(),
+            'has_credentials' => $this->docker->hasOauthToken(),
+            'error'           => $proc->isSuccessful() ? null : trim($proc->getErrorOutput()),
+        ]);
     }
 
     #[Route(path: '/login/cancel', name: 'login_cancel', methods: ['POST'])]
@@ -118,29 +141,14 @@ final class ClaudeController extends AbstractController
     public function logout(): JsonResponse
     {
         $this->docker->stopTokenLogin();
-
-        $proc = $this->docker->runInContainer([
-            'rm', '-f', self::CREDENTIALS_FILE,
-        ], timeoutSec: 5);
+        $proc = $this->docker->clearOauthToken();
         $proc->run();
 
         return new JsonResponse(['ok' => $proc->isSuccessful()]);
     }
 
-    private function hasCredentials(): bool
-    {
-        $proc = $this->docker->runInContainer([
-            'sh', '-c',
-            sprintf('test -f %s && echo present || echo missing', self::CREDENTIALS_FILE),
-        ], timeoutSec: 5);
-        $proc->run();
-
-        return 'present' === trim($proc->getOutput());
-    }
-
     private function cleanAnsi(string $raw): string
     {
-        // CSI- und OSC-Sequenzen entfernen, CR weg.
         $clean = preg_replace('/\x1b\[[0-9;?]*[ -\/]*[@-~]/', '', $raw) ?? $raw;
         $clean = preg_replace('/\x1b[\]P].*?(?:\x07|\x1b\\\\)/s', '', $clean) ?? $clean;
 
