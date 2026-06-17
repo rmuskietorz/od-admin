@@ -227,18 +227,24 @@ final class DockerClient
         return $this->deployDir().'/.env.claude-cli';
     }
 
+    // Token-Datei in od-admins EIGENEM, beschreibbarem Volume (var/data gehoert
+    // uid 1000). Das OD-Deploy-Verzeichnis gehoert root und ist :ro gemountet.
+    private const TOKEN_ENV = '/var/www/html/var/data/od_oauth.env';
+
     /**
      * @param list<string> $args
      */
     private function runCompose(array $args): Process
     {
         $cmd = ['docker', 'compose', '--file', $this->composeFile];
-        $envFile = $this->envFilePath();
-        if (is_file($envFile)) {
-            // Sonst werden ${...}-Variablen (Image, OAuth-Token) beim up/pull
-            // nicht aufgeloest.
-            $cmd[] = '--env-file';
-            $cmd[] = $envFile;
+        // Mehrere --env-file: Basis-Config aus .env.claude-cli, der OAuth-Token
+        // aus od_oauth.env (spaeter = hat Vorrang). Sonst blieben ${...}-Vars
+        // (Image, Token) beim up/pull leer.
+        foreach ([$this->envFilePath(), self::TOKEN_ENV] as $envFile) {
+            if (is_file($envFile)) {
+                $cmd[] = '--env-file';
+                $cmd[] = $envFile;
+            }
         }
         $cmd = [...$cmd, ...$args];
 
@@ -288,13 +294,11 @@ final class DockerClient
 
     private function writeEnvToken(?string $token): void
     {
-        $env = $this->envFilePath();
-        $script = sprintf(
-            'touch %1$s; grep -v "^CLAUDE_CODE_OAUTH_TOKEN=" %1$s > %1$s.tmp 2>/dev/null || true; mv %1$s.tmp %1$s',
-            $env,
-        );
-        if (null !== $token) {
-            $script .= sprintf('; printf "CLAUDE_CODE_OAUTH_TOKEN=%%s\n" "%s" >> %s', $token, $env);
+        if (null === $token) {
+            $script = sprintf('rm -f %s', self::TOKEN_ENV);
+        } else {
+            // $token ist auf sk-ant-oat01-[A-Za-z0-9_-]+ validiert -> safe.
+            $script = sprintf('printf "CLAUDE_CODE_OAUTH_TOKEN=%%s\n" "%s" > %s', $token, self::TOKEN_ENV);
         }
 
         $proc = new Process(['sh', '-c', $script], env: $this->processEnv());
