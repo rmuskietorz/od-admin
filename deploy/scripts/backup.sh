@@ -41,22 +41,43 @@ backup_volume() {
     ok "fertig: $(du -sh "${file}" | cut -f1)"
 }
 
-backup_volume od_admin_data       "${TARGET}/od_admin_data.tar.gz"
-backup_volume open_design_data    "${TARGET}/open_design_data.tar.gz"
-backup_volume claude_home         "${TARGET}/claude_home.tar.gz"
+# Compose praefixiert Volumes mit dem Projektnamen (open-design-claude_...,
+# od-admin_...). Echten Namen per Suffix aufloesen, sonst wuerde alles
+# uebersprungen.
+resolve_volume() {
+    local want="$1"
+    if docker volume inspect "$want" >/dev/null 2>&1; then
+        echo "$want"; return 0
+    fi
+    docker volume ls --format '{{.Name}}' | grep -E "(^|_)${want}\$" | head -1
+}
 
-# Optional: Compose-Files mitsichern, damit Rollback Zustand komplett ist
-log "Sichere Compose-Files..."
-if [ -d /opt/od-admin ]; then
+for v in od_admin_data open_design_data claude_home; do
+    real="$(resolve_volume "$v")"
+    if [ -n "$real" ]; then
+        backup_volume "$real" "${TARGET}/${v}.tar.gz"
+    else
+        err "Kein Volume '*_${v}' gefunden – ueberspringe."
+    fi
+done
+
+# Compose-Files + .env mitsichern (Rollback-Zustand komplett). Pfade aus dem
+# Skript-Ort + od-admin/.env ableiten, nicht /opt hartkodieren.
+OD_ADMIN_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+OD_DEPLOY_DIR="$(grep -E '^HOST_OD_DEPLOY_DIR=' "${OD_ADMIN_DIR}/.env" 2>/dev/null | cut -d= -f2)"
+[ -z "${OD_DEPLOY_DIR}" ] && OD_DEPLOY_DIR="$(dirname "${OD_ADMIN_DIR}")/open-design/deploy"
+
+log "Sichere Compose-Files (od-admin: ${OD_ADMIN_DIR}, OD: ${OD_DEPLOY_DIR})..."
+if [ -d "${OD_ADMIN_DIR}" ]; then
     tar -czf "${TARGET}/od-admin-config.tar.gz" \
-        -C /opt/od-admin \
+        -C "${OD_ADMIN_DIR}" \
         --exclude='var' --exclude='vendor' --exclude='node_modules' \
         compose.yml .env .env.local docker/ 2>/dev/null || true
 fi
-if [ -d /opt/open-design/deploy ]; then
+if [ -d "${OD_DEPLOY_DIR}" ]; then
     tar -czf "${TARGET}/open-design-config.tar.gz" \
-        -C /opt/open-design/deploy \
-        $(ls /opt/open-design/deploy/*.yml /opt/open-design/deploy/.env.claude-cli 2>/dev/null | xargs -n1 basename) 2>/dev/null || true
+        -C "${OD_DEPLOY_DIR}" \
+        $(ls "${OD_DEPLOY_DIR}"/*.yml "${OD_DEPLOY_DIR}"/.env.claude-cli 2>/dev/null | xargs -n1 basename) 2>/dev/null || true
 fi
 
 # Retention: Backups aelter als 30 Tage loeschen

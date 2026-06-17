@@ -475,6 +475,7 @@ _MITEMS=(
   "7:Backup jetzt ausfuehren"
   "71:Backup-Liste anzeigen"
   "72:Server-Setup-Doku oeffnen"
+  "73:Backup-Cron einrichten (taeglich 03:30)"
   "G:Konfiguration"
   "9:.env.local bearbeiten"
   "91:Compose-Konfig anzeigen"
@@ -1004,6 +1005,20 @@ case $option in
     72)
         print_info "Oeffne deploy/SERVER.md..."
         ${EDITOR:-less} "$SCRIPT_DIR/deploy/SERVER.md"
+        ;;
+    73)
+        print_header "Backup-Cron einrichten (taeglich 03:30)"
+        _bkscript="$SCRIPT_DIR/deploy/scripts/backup.sh"
+        if [ ! -x "$_bkscript" ]; then
+            print_err "$_bkscript nicht gefunden/executable"; continue
+        fi
+        _cronline="30 3 * * * $_bkscript >> /var/log/od-admin-backup.log 2>&1"
+        # Bestehenden Eintrag ersetzen (idempotent).
+        ( crontab -l 2>/dev/null | grep -v 'deploy/scripts/backup.sh'; echo "$_cronline" ) | crontab - \
+            && print_ok "Cron gesetzt: taeglich 03:30 -> /var/log/od-admin-backup.log" \
+            || print_err "crontab-Setzen fehlgeschlagen (als root ausfuehren?)"
+        print_info "Aktive Crontab:"
+        crontab -l 2>/dev/null | grep 'backup.sh' || true
         ;;
 
     # Konfiguration
