@@ -81,6 +81,60 @@ final class AdminController extends AbstractController
         ], $up->isSuccessful() ? 200 : 500);
     }
 
+    /**
+     * Update (pull + recreate) als Live-Stream (SSE), damit der Ablauf im
+     * Dashboard sichtbar ist. Laeuft ueber od-admin -> beide --env-file
+     * (Image/Origins + OAuth-Token) bleiben erhalten.
+     */
+    #[Route(path: '/admin/update/stream', name: 'app_update_stream', methods: ['GET'])]
+    public function updateStream(): StreamedResponse
+    {
+        $response = new StreamedResponse(function (): void {
+            $emit = static function (string $line): void {
+                echo 'data: '.str_replace("\n", '\\n', $line)."\n\n";
+                if (function_exists('ob_flush')) {
+                    @ob_flush();
+                }
+                flush();
+            };
+
+            $stream = static function (\Symfony\Component\Process\Process $proc) use ($emit): bool {
+                $proc->start();
+                foreach ($proc as $data) {
+                    if (!is_string($data) || '' === $data) {
+                        continue;
+                    }
+                    foreach (preg_split('/\R/', rtrim($data)) ?: [] as $line) {
+                        if ('' !== trim($line)) {
+                            $emit($line);
+                        }
+                    }
+                }
+
+                return $proc->isSuccessful();
+            };
+
+            $emit('▸ Pull: neuestes Image ziehen…');
+            if (!$stream($this->docker->updateImage())) {
+                $emit('✗ Pull fehlgeschlagen.');
+                $emit('[DONE]');
+
+                return;
+            }
+
+            $emit('▸ Recreate: Container mit aktueller Konfiguration neu erzeugen…');
+            $ok = $stream($this->docker->up());
+            $emit($ok ? '✓ Fertig — Open Design aktualisiert/neu erzeugt.' : '✗ Recreate fehlgeschlagen.');
+            $emit('[DONE]');
+        });
+
+        $response->headers->set('Content-Type', 'text/event-stream');
+        $response->headers->set('Cache-Control', 'no-cache');
+        $response->headers->set('X-Accel-Buffering', 'no');
+
+        return $response;
+    }
+
     #[Route(path: '/admin/logs', name: 'app_logs', methods: ['GET'])]
     public function logs(): StreamedResponse
     {

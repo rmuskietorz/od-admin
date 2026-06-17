@@ -77,20 +77,51 @@
             el.textContent = JSON.stringify(value, null, 2);
         }
 
+        // Prozess-Ergebnis lesbar darstellen (statt rohem JSON).
+        function showProc(el, j) {
+            el.style.display = '';
+            let t = (j.ok === false ? '✗ Fehler' : '✓ OK');
+            for (const k of ['stdout', 'stderr', 'output', 'error']) {
+                if (j[k]) t += '\n\n── ' + k + ' ──\n' + j[k];
+            }
+            el.textContent = t.trim();
+        }
+
         async function call(url, method = 'POST') {
             actionOut.style.display = '';
             actionOut.textContent = 'läuft …';
             const r = await fetch(url, { method, headers: { 'Accept': 'application/json' } });
             const j = await r.json();
-            showJson(actionOut, j);
+            showProc(actionOut, j);
             return j;
         }
 
         document.getElementById('btn-status').onclick = () => location.reload();
         document.getElementById('btn-restart').onclick = () => call('{{ path('app_restart') }}');
-        document.getElementById('btn-update').onclick = async () => {
-            if (!confirm('Aktuelles Image pullen und Container neu starten?')) return;
-            await call('{{ path('app_update') }}');
+        document.getElementById('btn-update').onclick = () => {
+            if (!confirm('Neuestes Image ziehen und Container neu erzeugen?')) return;
+            const btn = document.getElementById('btn-update');
+            actionOut.style.display = '';
+            actionOut.textContent = '';
+            btn.disabled = true;
+            let done = false;
+            // Live-Stream (SSE): Pull + Recreate zeilenweise sichtbar.
+            const es = new EventSource('{{ path('app_update_stream') }}');
+            es.onmessage = (e) => {
+                if (e.data === '[DONE]') {
+                    done = true; es.close(); btn.disabled = false;
+                    actionOut.textContent += '\n→ Klick „Aktualisieren" fuer den neuen Status.';
+                    refreshClaudeStatus();
+                    return;
+                }
+                actionOut.textContent += e.data.replace(/\\n/g, '\n') + '\n';
+                actionOut.scrollTop = actionOut.scrollHeight;
+            };
+            es.onerror = () => {
+                if (done) return;
+                es.close(); btn.disabled = false;
+                actionOut.textContent += '\n[Verbindung beendet]';
+            };
         };
 
         function badge(cls, text) {
