@@ -77,22 +77,19 @@ services:
       - od-net
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    # Das tsl0922/ttyd-Image bringt KEIN docker-cli mit; ohne den Client
+    # schlaegt der `docker exec` mit "execvp failed" fehl. Daher beim Start
+    # docker-cli (Alpine) nachinstallieren, dann ttyd exec'en.
+    # Auth wird durch nginx auth_request davor sichergestellt; ttyd selbst
+    # ist nicht aus dem Internet erreichbar (kein ports:-Mapping).
     command:
-      - ttyd
-      - --port=7681
-      - --interface=0.0.0.0
-      # Auth wird durch nginx auth_request davor sichergestellt. ttyd selbst
-      # ist nicht aus dem Internet erreichbar (kein ports:-Mapping).
-      - --writable
-      - docker
-      - exec
-      - -it
-      - -u
-      - open-design
-      - open-design-claude
       - sh
       - -c
-      - "claude setup-token || claude /login"
+      - >
+        apk add --no-cache docker-cli >/dev/null 2>&1 || true;
+        exec ttyd --port=7681 --interface=0.0.0.0 --writable
+        docker exec -it -u open-design open-design-claude
+        sh -c 'claude setup-token || claude /login'
     mem_limit: 64m
     pids_limit: 64
     security_opt:

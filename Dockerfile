@@ -14,6 +14,9 @@ RUN apk add --no-cache \
         nginx \
         tini \
         bash \
+        curl \
+        docker-cli \
+        docker-cli-compose \
         sqlite \
         sqlite-libs \
         sqlite-dev \
