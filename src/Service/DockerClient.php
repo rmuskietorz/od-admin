@@ -164,12 +164,15 @@ final class DockerClient
     public function submitTokenCode(string $code): void
     {
         // Code via stdin der FIFO uebergeben – keine Shell-Interpolation.
+        // Abschluss mit \r (Carriage Return): claude laeuft im Raw-TTY-Modus
+        // und erkennt nur \r als Enter, nicht \n -> sonst bleibt der Code im
+        // Eingabefeld stehen und wird nie abgeschickt.
         $proc = new Process(
             ['sh', '-c', sprintf('cat >> %s', self::TOKEN_IN)],
             env: $this->processEnv(),
         );
         $proc->setTimeout(5.0);
-        $proc->setInput(trim($code)."\n");
+        $proc->setInput(trim($code)."\r");
         $proc->run();
     }
 
