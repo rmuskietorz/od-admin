@@ -33,8 +33,10 @@ OD_REPO_HTTPS="${OD_REPO_HTTPS:-https://github.com/rmuskietorz/open-design.git}"
 OD_BRANCH="${OD_BRANCH:-claude-cli-deploy}"
 OD_IMAGE="${OD_IMAGE:-ghcr.io/rmuskietorz/open-design-claude:latest}"
 OD_DIR="${OD_DIR:-$(dirname "$SCRIPT_DIR")/open-design}"
-OD_DOMAIN="${OD_DOMAIN:-}"
-ADMIN_DOMAIN="${ADMIN_DOMAIN:-}"
+# Oeffentliche Domain: od-admin frontet Open Design unter EINER Domain.
+DEFAULT_DOMAIN="${DEFAULT_DOMAIN:-open-design.robmus.de}"
+OD_DOMAIN="${OD_DOMAIN:-$DEFAULT_DOMAIN}"
+ADMIN_DOMAIN="${ADMIN_DOMAIN:-$DEFAULT_DOMAIN}"
 [ -f "$STATE_FILE" ] && . "$STATE_FILE"
 
 _save_state() {
@@ -60,6 +62,17 @@ backup_file() {
 gen_secret() {  # gen_secret <hex-bytes>
     openssl rand -hex "$1" 2>/dev/null \
         || head -c "$(( $1 * 2 ))" /dev/urandom | od -An -tx1 | tr -d ' \n'
+}
+
+# True, wenn auf dem Host bereits etwas auf <port> lauscht.
+_port_in_use() {  # _port_in_use <port>
+    if command -v ss >/dev/null 2>&1; then
+        ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$1\$"
+    elif command -v lsof >/dev/null 2>&1; then
+        lsof -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
+    else
+        docker ps --format '{{.Ports}}' 2>/dev/null | grep -qE "[:.]$1->"
+    fi
 }
 
 # Setzt KEY=VALUE in einer .env-Datei (Compose-Interpolations-Variablen).
@@ -174,7 +187,7 @@ setup_env_admin() {
     print_header "od-admin .env.local"
     print_sep
     local envlocal="$SCRIPT_DIR/.env.local" envmain="$SCRIPT_DIR/.env"
-    ADMIN_DOMAIN=$(ask_default "Admin-Domain (TRUSTED_HOSTS)" "${ADMIN_DOMAIN:-admin.example.com}")
+    ADMIN_DOMAIN=$(ask_default "Admin-Domain (TRUSTED_HOSTS)" "$ADMIN_DOMAIN")
     local domain_esc; domain_esc=$(printf '%s' "$ADMIN_DOMAIN" | sed 's/\./\\./g')
     if [ -f "$envlocal" ]; then
         backup_file "$envlocal"
@@ -214,7 +227,14 @@ EOF
         && print_info ".env auf skip-worktree gesetzt"
     upsert_env "$envmain" "HOST_OD_DEPLOY_DIR" "$OD_DIR/deploy"
     upsert_env "$envmain" "OD_ADMIN_RESTART" "unless-stopped"
-    print_ok ".env: HOST_OD_DEPLOY_DIR + OD_ADMIN_RESTART=unless-stopped gesetzt"
+    # Freien Host-Port sicherstellen (Default 8082 ist auf vielen Hosts belegt).
+    local port; port=$(grep -E '^OD_ADMIN_PORT=' "$envmain" 2>/dev/null | cut -d= -f2); port="${port:-8082}"
+    while _port_in_use "$port"; do
+        print_info "Host-Port $port ist belegt."
+        port=$(ask_default "Alternativer od-admin Host-Port" "$((port+1))")
+    done
+    upsert_env "$envmain" "OD_ADMIN_PORT" "$port"
+    print_ok ".env: HOST_OD_DEPLOY_DIR, OD_ADMIN_RESTART=unless-stopped, OD_ADMIN_PORT=$port"
     _save_state
 }
 
@@ -223,7 +243,14 @@ setup_start_admin() {
     print_sep
     docker network inspect od-net >/dev/null 2>&1 \
         || { print_err "Netz 'od-net' fehlt — erst OD-Server starten."; return 1; }
-    print_info "Baue + starte od-admin (Restart-Policy aus .env)..."
+    # Port-Konflikt vorab abfangen (Default 8082 oft belegt) — wenn od-admin
+    # nicht selbst schon laeuft.
+    local port; port=$(grep -E '^OD_ADMIN_PORT=' "$SCRIPT_DIR/.env" 2>/dev/null | cut -d= -f2); port="${port:-8082}"
+    if _port_in_use "$port" && [ -z "$(cd "$SCRIPT_DIR" && docker compose ps -q od-admin 2>/dev/null)" ]; then
+        print_err "Host-Port $port ist belegt (anderer Container?). Erst Punkt 86 → freien Port waehlen."
+        return 1
+    fi
+    print_info "Baue + starte od-admin (Port $port, Restart-Policy aus .env)..."
     ( cd "$SCRIPT_DIR" && docker compose up -d --build ) \
         || { print_err "Start fehlgeschlagen"; return 1; }
     ( cd "$SCRIPT_DIR" && docker compose ps )
@@ -288,7 +315,7 @@ setup_nginx_vhost() {
             && { _sudo apt update && _sudo apt install -y nginx; } \
             || { print_info "Abgebrochen."; return 1; }
     fi
-    ADMIN_DOMAIN=$(ask_default "Admin-Domain" "${ADMIN_DOMAIN:-admin.example.com}")
+    ADMIN_DOMAIN=$(ask_default "Admin-Domain" "$ADMIN_DOMAIN")
     local port; port=$(grep -E '^OD_ADMIN_PORT=' "$SCRIPT_DIR/.env" 2>/dev/null | cut -d= -f2); port="${port:-8082}"
 
     # Erreichbarkeit des Containers auf dem veroeffentlichten Host-Port.
@@ -343,7 +370,7 @@ setup_ssl() {
             && { _sudo apt update && _sudo apt install -y certbot python3-certbot-nginx; } \
             || { print_info "Abgebrochen."; return 1; }
     fi
-    ADMIN_DOMAIN=$(ask_default "Admin-Domain" "${ADMIN_DOMAIN:-admin.example.com}")
+    ADMIN_DOMAIN=$(ask_default "Admin-Domain" "$ADMIN_DOMAIN")
     if [ ! -e "/etc/nginx/sites-enabled/od-admin" ]; then
         print_err "Kein od-admin vHost aktiv — erst Menuepunkt 92."; return 1
     fi
@@ -428,9 +455,10 @@ _MITEMS=(
   "84:OD .env.claude-cli"
   "85:OD-Server starten"
   "86:od-admin .env.local"
-  "87:Admin-User anlegen"
-  "88:Abschluss (Smoke + OAuth)"
-  "89:Einrichtungs-Status"
+  "87:od-admin starten"
+  "88:Admin-User anlegen"
+  "89:Abschluss (Smoke + OAuth)"
+  "80:Einrichtungs-Status"
   "G:Reverse-Proxy & TLS"
   "92:nginx vHost einrichten"
   "93:SSL-Zertifikat (certbot)"
@@ -941,9 +969,10 @@ case $option in
     84) setup_env_od ;;
     85) setup_start_od ;;
     86) setup_env_admin ;;
-    87) setup_user ;;
-    88) setup_finish ;;
-    89) setup_status ;;
+    87) setup_start_admin ;;
+    88) setup_user ;;
+    89) setup_finish ;;
+    80) setup_status ;;
 
     # Reverse-Proxy & TLS
     92) setup_nginx_vhost ;;
