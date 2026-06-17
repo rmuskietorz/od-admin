@@ -163,17 +163,26 @@ final class DockerClient
 
     public function submitTokenCode(string $code): void
     {
-        // Code via stdin der FIFO uebergeben – keine Shell-Interpolation.
-        // Abschluss mit \r (Carriage Return): claude laeuft im Raw-TTY-Modus
-        // und erkennt nur \r als Enter, nicht \n -> sonst bleibt der Code im
-        // Eingabefeld stehen und wird nie abgeschickt.
-        $proc = new Process(
+        // Code und Enter GETRENNT senden: claude (Ink-TUI, Raw-TTY) behandelt
+        // ein "code\r" in einem Rutsch als reinen Paste-Text, das \r wird Teil
+        // des Werts statt Enter. Erst den Code schreiben, kurz warten, dann \r
+        // als eigenes Ereignis -> wird als Enter erkannt und der Code gesendet.
+        $write = new Process(
             ['sh', '-c', sprintf('cat >> %s', self::TOKEN_IN)],
             env: $this->processEnv(),
         );
-        $proc->setTimeout(5.0);
-        $proc->setInput(trim($code)."\r");
-        $proc->run();
+        $write->setTimeout(5.0);
+        $write->setInput(trim($code));
+        $write->run();
+
+        usleep(400_000);
+
+        $enter = new Process(
+            ['sh', '-c', sprintf('printf "\\r" >> %s', self::TOKEN_IN)],
+            env: $this->processEnv(),
+        );
+        $enter->setTimeout(5.0);
+        $enter->run();
     }
 
     public function stopTokenLogin(): void
