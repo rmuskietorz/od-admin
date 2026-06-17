@@ -1,0 +1,15 @@
+# ttyd + docker-cli. Das offizielle tsl0922/ttyd bringt keinen docker-Client
+# mit; ohne den schlaegt der `docker exec` in den OD-Container fehl
+# ("execvp failed" / "docker: not found"). docker-cli liegt in Alpines
+# community-Repo — falls im Basis-Image nicht aktiv, ergaenzen wir es.
+FROM tsl0922/ttyd:latest
+
+USER root
+RUN set -eux; \
+    if ! apk add --no-cache docker-cli 2>/dev/null; then \
+        echo "https://dl-cdn.alpinelinux.org/alpine/v$(cut -d. -f1,2 /etc/alpine-release)/community" \
+            >> /etc/apk/repositories; \
+        apk update; \
+        apk add --no-cache docker-cli; \
+    fi; \
+    docker --version
