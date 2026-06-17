@@ -42,6 +42,10 @@ if [ ! -f var/data/app.db ]; then
     touch var/data/app.db
 fi
 
+# Persistentes Session-Verzeichnis (siehe framework.yaml save_path). Liegt im
+# var/data-Volume, damit Logins Container-Neustarts ueberleben.
+mkdir -p var/data/sessions
+
 # Cache & Logs liegen im tmpfs (frisch bei jedem Start) – warmup hier laufen
 # lassen, weil der build-time-warmup vom tmpfs-Mount ueberschrieben wird.
 echo "[entrypoint] Symfony Cache warmup..."

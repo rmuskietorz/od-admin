@@ -5,7 +5,8 @@
 # Das tsl0922/ttyd-Image ist NICHT Alpine (kein apk) -> wir holen das
 # statische docker-CLI-Binary aus dem offiziellen docker:cli-Image. Das ist
 # ein weitgehend statisches Go-Binary und laeuft distro-unabhaengig.
-FROM docker:cli AS dockercli
+# Auf Major gepinnt (statt :cli=latest) fuer reproduzierbare Builds.
+FROM docker:28-cli AS dockercli
 
 FROM tsl0922/ttyd:latest
 COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker

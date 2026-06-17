@@ -9,6 +9,9 @@ framework:
 
     session:
         handler_id: null
+        # Sessions ins persistente var/data-Volume (Default waere tmpfs -> bei
+        # jedem Container-Neustart ausgeloggt). Verzeichnis legt entrypoint.sh an.
+        save_path: '%kernel.project_dir%/var/data/sessions'
         cookie_secure: auto
         cookie_samesite: lax
         cookie_path: '%env(default::COOKIE_PATH)%'
