@@ -19,6 +19,282 @@ ask_secret() {
     echo "$_secret"
 }
 
+ask_default() { local _a; read -r -p "  $1 [$2]: " _a; echo "${_a:-$2}"; }
+confirm()     { local _a; read -r -p "  $1 (y/n): " _a; [ "$_a" = "y" ]; }
+
+# ─── Server-Einrichtung: Config + Helfer ──────────────────────────────────────
+# Erst-Installation laeuft ueber das gleiche Menue (Gruppe "Server-Einrichtung").
+
+STATE_FILE="$SCRIPT_DIR/.setup.state"
+
+GHCR_USER="${GHCR_USER:-rmuskietorz}"
+OD_REPO_SSH="${OD_REPO_SSH:-git@github.com:rmuskietorz/open-design.git}"
+OD_REPO_HTTPS="${OD_REPO_HTTPS:-https://github.com/rmuskietorz/open-design.git}"
+OD_BRANCH="${OD_BRANCH:-claude-cli-deploy}"
+OD_IMAGE="${OD_IMAGE:-ghcr.io/rmuskietorz/open-design-claude:latest}"
+OD_DIR="${OD_DIR:-$(dirname "$SCRIPT_DIR")/open-design}"
+OD_DOMAIN="${OD_DOMAIN:-}"
+ADMIN_DOMAIN="${ADMIN_DOMAIN:-}"
+[ -f "$STATE_FILE" ] && . "$STATE_FILE"
+
+_save_state() {
+    cat > "$STATE_FILE" <<EOF
+# Von helper.sh (Server-Einrichtung) gespeichert.
+GHCR_USER="$GHCR_USER"
+OD_DIR="$OD_DIR"
+OD_IMAGE="$OD_IMAGE"
+OD_DOMAIN="$OD_DOMAIN"
+ADMIN_DOMAIN="$ADMIN_DOMAIN"
+EOF
+    if [ -f "$SCRIPT_DIR/.gitignore" ] && ! grep -qxF '/.setup.state' "$SCRIPT_DIR/.gitignore"; then
+        echo '/.setup.state' >> "$SCRIPT_DIR/.gitignore"
+    fi
+}
+
+backup_file() {
+    [ -f "$1" ] || return 0
+    local bak="$1.bak-$(date +%Y%m%d-%H%M%S)"
+    cp "$1" "$bak" && print_info "Gesichert: $(basename "$bak")"
+}
+
+gen_secret() {  # gen_secret <hex-bytes>
+    openssl rand -hex "$1" 2>/dev/null \
+        || head -c "$(( $1 * 2 ))" /dev/urandom | od -An -tx1 | tr -d ' \n'
+}
+
+# Setzt KEY=VALUE in einer .env-Datei (Compose-Interpolations-Variablen).
+upsert_env() {  # upsert_env <file> <key> <value>
+    local f="$1" k="$2" v="$3"
+    if grep -qE "^${k}=" "$f"; then
+        sed -i -E "s|^${k}=.*|${k}=${v}|" "$f"
+    elif grep -qE "^# *${k}=" "$f"; then
+        sed -i -E "s|^# *${k}=.*|${k}=${v}|" "$f"
+    else
+        printf '%s=%s\n' "$k" "$v" >> "$f"
+    fi
+}
+
+setup_preflight() {
+    print_header "Preflight"
+    print_sep
+    local rc=0 bin
+    for bin in docker git openssl curl; do
+        command -v "$bin" >/dev/null 2>&1 \
+            && print_ok "$bin vorhanden" || { print_err "$bin fehlt"; rc=1; }
+    done
+    docker compose version >/dev/null 2>&1 \
+        && print_ok "docker compose (v2) vorhanden" || { print_err "docker compose v2 fehlt"; rc=1; }
+    docker info >/dev/null 2>&1 \
+        && print_ok "Docker-Daemon erreichbar" || { print_err "Docker-Daemon nicht erreichbar"; rc=1; }
+    return $rc
+}
+
+setup_login() {
+    print_header "GHCR-Login"
+    print_sep
+    print_info "Damit der Server das private Image ziehen kann (+ Watchtower-Updates)."
+    if docker pull "$OD_IMAGE" >/dev/null 2>&1; then
+        print_ok "Image bereits ziehbar — Login evtl. nicht noetig."
+        confirm "Trotzdem neu einloggen?" || return 0
+    fi
+    GHCR_USER=$(ask_default "GitHub-User" "$GHCR_USER")
+    print_info "Personal Access Token (classic, Scope read:packages). Eingabe verdeckt."
+    local pat; read -r -s -p "  Token: " pat; echo ""
+    [ -z "$pat" ] && { print_err "Kein Token — abgebrochen."; return 1; }
+    if echo "$pat" | docker login ghcr.io -u "$GHCR_USER" --password-stdin; then
+        print_ok "Login ok → ~/.docker/config.json (von Watchtower gemountet)."
+    else
+        print_err "Login fehlgeschlagen. Token/Scope pruefen."; unset pat; return 1
+    fi
+    unset pat; _save_state
+}
+
+setup_clone() {
+    print_header "Open-Design-Fork klonen / aktualisieren"
+    print_sep
+    OD_DIR=$(ask_default "Zielverzeichnis fuer den Fork" "$OD_DIR")
+    if [ -d "$OD_DIR/.git" ]; then
+        print_info "Repo existiert — aktualisiere ($OD_BRANCH)..."
+        git -C "$OD_DIR" fetch --quiet origin "$OD_BRANCH" \
+            && git -C "$OD_DIR" checkout --quiet "$OD_BRANCH" \
+            && git -C "$OD_DIR" pull --quiet --ff-only origin "$OD_BRANCH" \
+            && print_ok "Fork aktuell" || { print_err "git-Update fehlgeschlagen"; return 1; }
+    else
+        local url="$OD_REPO_SSH"
+        confirm "SSH ($OD_REPO_SSH) nutzen? (n = HTTPS)" || url="$OD_REPO_HTTPS"
+        print_info "Klone $url ($OD_BRANCH)..."
+        git clone --quiet -b "$OD_BRANCH" "$url" "$OD_DIR" \
+            && print_ok "Geklont nach $OD_DIR" || { print_err "git clone fehlgeschlagen"; return 1; }
+    fi
+    [ -f "$OD_DIR/deploy/docker-compose.claude-cli.server.yml" ] \
+        || { print_err "deploy-Compose fehlt im Fork — falscher Branch?"; return 1; }
+    _save_state
+}
+
+setup_env_od() {
+    print_header "OD-Server .env.claude-cli"
+    print_sep
+    local deploy="$OD_DIR/deploy" envf="$OD_DIR/deploy/.env.claude-cli"
+    [ -f "$deploy/.env.claude-cli.example" ] \
+        || { print_err "$deploy/.env.claude-cli.example fehlt — erst Fork klonen."; return 1; }
+    OD_IMAGE=$(ask_default "OD-Image" "$OD_IMAGE")
+    OD_DOMAIN=$(ask_default "OD-Domain (ALLOWED_ORIGINS, leer = keine)" "$OD_DOMAIN")
+    backup_file "$envf"
+    cp "$deploy/.env.claude-cli.example" "$envf"
+    upsert_env "$envf" "OPEN_DESIGN_IMAGE" "$OD_IMAGE"
+    [ -n "$OD_DOMAIN" ] && upsert_env "$envf" "OPEN_DESIGN_ALLOWED_ORIGINS" "https://$OD_DOMAIN"
+    if grep -qE '^ANTHROPIC_API_KEY=.+' "$envf"; then
+        sed -i -E 's|^(ANTHROPIC_API_KEY=).*|# \1  # ABSICHTLICH LEER — Abo-Token via ttyd|' "$envf"
+        print_info "ANTHROPIC_API_KEY entschaerft."
+    fi
+    print_ok ".env.claude-cli geschrieben"
+    _save_state
+}
+
+setup_start_od() {
+    print_header "OD-Server starten"
+    print_sep
+    local deploy="$OD_DIR/deploy"
+    local c="docker compose -f $deploy/docker-compose.claude-cli.server.yml --env-file $deploy/.env.claude-cli"
+    print_info "Starte OD + Watchtower (legt Netz 'od-net' an)..."
+    ( cd "$deploy" && $c up -d ) || { print_err "Start fehlgeschlagen"; return 1; }
+    print_info "Warte auf Health (max 60s)..."
+    local i
+    for i in $(seq 1 30); do
+        if curl -sf http://127.0.0.1:7456/api/health >/dev/null 2>&1; then
+            print_ok "OD healthy"; ( cd "$deploy" && $c ps ); return 0
+        fi
+        sleep 2
+    done
+    print_err "OD nicht rechtzeitig healthy. Logs: cd $deploy && $c logs --tail 80 open-design"
+    return 1
+}
+
+setup_env_admin() {
+    print_header "od-admin .env.local"
+    print_sep
+    local envlocal="$SCRIPT_DIR/.env.local" envmain="$SCRIPT_DIR/.env"
+    ADMIN_DOMAIN=$(ask_default "Admin-Domain (TRUSTED_HOSTS)" "${ADMIN_DOMAIN:-admin.example.com}")
+    local domain_esc; domain_esc=$(printf '%s' "$ADMIN_DOMAIN" | sed 's/\./\\./g')
+    if [ -f "$envlocal" ]; then
+        backup_file "$envlocal"
+        confirm "Bestehende .env.local ueberschreiben?" || { print_info "Uebersprungen."; return 0; }
+    fi
+    print_info "Generiere Secrets..."
+    local app_secret ttyd_token
+    app_secret=$(gen_secret 32); ttyd_token=$(gen_secret 16)
+    [ -z "$app_secret" ] || [ -z "$ttyd_token" ] && { print_err "Secret-Generierung fehlgeschlagen."; return 1; }
+    cat > "$envlocal" <<EOF
+APP_ENV=prod
+APP_DEBUG=0
+APP_SECRET=$app_secret
+
+DATABASE_URL="sqlite:///%kernel.project_dir%/var/data/app.db"
+
+OD_CONTAINER_NAME=open-design-claude
+OD_UPSTREAM_URL=http://open-design-claude:7456
+OD_COMPOSE_FILE=/host/open-design/docker-compose.claude-cli.server.yml
+
+TTYD_UPSTREAM_URL=http://ttyd:7681
+TTYD_SHARED_TOKEN=$ttyd_token
+
+DOCKER_HOST=unix:///var/run/docker.sock
+
+# Session-Cookie unter / (OD-Proxy liegt auf /, nicht /admin) — siehe DEBT-002.
+COOKIE_PATH=/
+
+TRUSTED_HOSTS=^($domain_esc)\$
+TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+EOF
+    unset app_secret ttyd_token
+    print_ok ".env.local geschrieben (Secrets generiert, nicht angezeigt)"
+    # Compose liest fuer ${...}-Interpolation NUR .env, nicht .env.local. .env ist
+    # getrackt → skip-worktree, damit Server-Pfade nicht dirty/Konflikt werden.
+    git -C "$SCRIPT_DIR" update-index --skip-worktree .env 2>/dev/null \
+        && print_info ".env auf skip-worktree gesetzt"
+    upsert_env "$envmain" "HOST_OD_DEPLOY_DIR" "$OD_DIR/deploy"
+    upsert_env "$envmain" "OD_ADMIN_RESTART" "unless-stopped"
+    print_ok ".env: HOST_OD_DEPLOY_DIR + OD_ADMIN_RESTART=unless-stopped gesetzt"
+    _save_state
+}
+
+setup_start_admin() {
+    print_header "od-admin starten"
+    print_sep
+    docker network inspect od-net >/dev/null 2>&1 \
+        || { print_err "Netz 'od-net' fehlt — erst OD-Server starten."; return 1; }
+    print_info "Baue + starte od-admin (Restart-Policy aus .env)..."
+    ( cd "$SCRIPT_DIR" && docker compose up -d --build ) \
+        || { print_err "Start fehlgeschlagen"; return 1; }
+    ( cd "$SCRIPT_DIR" && docker compose ps )
+    print_ok "od-admin gestartet"
+}
+
+setup_finish() {
+    print_header "Abschluss & Claude-OAuth"
+    print_sep
+    if curl -sf http://127.0.0.1:7456/api/health >/dev/null 2>&1; then
+        print_ok "OD-Server : /api/health ok"
+    else
+        print_err "OD-Server : /api/health nicht erreichbar"
+    fi
+    local p; p=$(grep -E '^OD_ADMIN_PORT=' "$SCRIPT_DIR/.env" 2>/dev/null | cut -d= -f2); p="${p:-8082}"
+    if curl -sf "http://127.0.0.1:${p}/admin/login" >/dev/null 2>&1; then
+        print_ok "od-admin  : /admin/login ok (Port $p)"
+    else
+        print_err "od-admin  : /admin/login nicht erreichbar (Port $p)"
+    fi
+    echo ""
+    echo -e "  ${BOLD}${CYAN}Claude OAuth (Abo-Token, KEIN API-Key):${RESET}"
+    echo "    1. Reverse-Proxy/TLS auf Admin-Domain (Upstream 127.0.0.1:${p})."
+    echo "    2. https://${ADMIN_DOMAIN:-<admin-domain>}/admin oeffnen, einloggen."
+    echo "    3. ttyd-Terminal oeffnen → 'claude setup-token' laeuft automatisch."
+    echo "    4. URL autorisieren, Code zurueck ins Terminal (Token → claude_home-Volume)."
+    echo ""
+}
+
+setup_status() {
+    print_header "Einrichtungs-Status"
+    print_sep
+    echo "    OD-Verzeichnis : $OD_DIR"
+    echo "    OD-Image       : $OD_IMAGE"
+    echo "    Admin-Domain   : ${ADMIN_DOMAIN:-(nicht gesetzt)}"
+    echo ""
+    [ -f "$OD_DIR/deploy/.env.claude-cli" ] && print_ok ".env.claude-cli" || print_err ".env.claude-cli fehlt"
+    [ -f "$SCRIPT_DIR/.env.local" ] && print_ok "od-admin .env.local" || print_err ".env.local fehlt"
+    docker network inspect od-net >/dev/null 2>&1 && print_ok "od-net existiert" || print_err "od-net fehlt"
+    echo ""
+    docker ps --filter "name=open-design-claude" --filter "name=od-admin" --filter "name=watchtower" \
+        --format '    {{.Names}}\t{{.Status}}' 2>/dev/null || true
+}
+
+setup_user() {
+    print_header "Admin-User anlegen"
+    local username; username=$(ask "Username")
+    [ -z "$username" ] && { print_err "Kein Username."; return 1; }
+    print_info "Passwort min. 12 Zeichen (bcrypt cost 13)."
+    $APP_TTY php bin/console app:create-user "$username"
+}
+
+run_setup_all() {
+    print_header "Server-Einrichtung — gefuehrter Komplettlauf"
+    print_sep
+    echo "  Preflight → GHCR-Login → Fork → OD-Server → od-admin-Config"
+    echo "  → od-admin-Start → Admin-User → Abschluss"
+    echo ""
+    confirm "Starten?" || { print_info "Abgebrochen."; return 0; }
+    setup_preflight  || { print_err "Preflight fehlgeschlagen."; return 1; }
+    setup_login      || return 1
+    setup_clone      || return 1
+    setup_env_od     || return 1
+    setup_start_od   || return 1
+    setup_env_admin  || return 1
+    setup_start_admin || return 1
+    setup_user       || print_info "User-Schritt uebersprungen — spaeter Menuepunkt 87."
+    setup_finish
+    print_ok "Einrichtung abgeschlossen."
+}
+
 # ─── TUI ──────────────────────────────────────────────────────────────────────
 
 _MITEMS=(
@@ -58,6 +334,17 @@ _MITEMS=(
   "63:OD Logs streamen"
   "64:Claude CLI Status"
   "65:Claude Test-Prompt"
+  "G:Server-Einrichtung (Erstinstallation)"
+  "8:Komplett-Einrichtung (gefuehrt)"
+  "81:Preflight"
+  "82:GHCR-Login"
+  "83:Fork klonen/aktualisieren"
+  "84:OD .env.claude-cli"
+  "85:OD-Server starten"
+  "86:od-admin .env.local"
+  "87:Admin-User anlegen"
+  "88:Abschluss (Smoke + OAuth)"
+  "89:Einrichtungs-Status"
   "G:Deploy & Backup"
   "7:Backup jetzt ausfuehren"
   "71:Backup-Liste anzeigen"
@@ -65,7 +352,6 @@ _MITEMS=(
   "G:Konfiguration"
   "9:.env.local bearbeiten"
   "91:Compose-Konfig anzeigen"
-  "92:Server-Ersteinrichtung (setup.sh)"
   "99:Container + Volumes loeschen (DESTRUKTIV)"
 )
 
@@ -558,6 +844,18 @@ case $option in
             | python3 -m json.tool 2>/dev/null
         ;;
 
+    # Server-Einrichtung (Erstinstallation)
+    8)  run_setup_all ;;
+    81) setup_preflight ;;
+    82) setup_login ;;
+    83) setup_clone ;;
+    84) setup_env_od ;;
+    85) setup_start_od ;;
+    86) setup_env_admin ;;
+    87) setup_user ;;
+    88) setup_finish ;;
+    89) setup_status ;;
+
     # Deploy & Backup
     7)
         print_info "Backup ausfuehren..."
@@ -583,14 +881,6 @@ case $option in
         ;;
     91)
         $COMPOSE config
-        ;;
-    92)
-        print_header "Server-Ersteinrichtung"
-        if [ -x "$SCRIPT_DIR/setup.sh" ]; then
-            bash "$SCRIPT_DIR/setup.sh"
-        else
-            print_err "setup.sh nicht gefunden / nicht executable"
-        fi
         ;;
     99)
         print_header "Container + Volumes loeschen"
