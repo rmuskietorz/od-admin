@@ -245,11 +245,12 @@ setup_finish() {
         print_err "od-admin  : /admin/login nicht erreichbar (Port $p)"
     fi
     echo ""
-    echo -e "  ${BOLD}${CYAN}Claude OAuth (Abo-Token, KEIN API-Key):${RESET}"
-    echo "    1. Reverse-Proxy/TLS auf Admin-Domain (Upstream 127.0.0.1:${p})."
-    echo "    2. https://${ADMIN_DOMAIN:-<admin-domain>}/admin oeffnen, einloggen."
-    echo "    3. ttyd-Terminal oeffnen → 'claude setup-token' laeuft automatisch."
-    echo "    4. URL autorisieren, Code zurueck ins Terminal (Token → claude_home-Volume)."
+    echo -e "  ${BOLD}${CYAN}Naechste Schritte:${RESET}"
+    echo "    A. Reverse-Proxy + TLS: Menuepunkt 92 (nginx vHost) → 93 (SSL/certbot)."
+    echo "    B. Claude OAuth (Abo-Token, KEIN API-Key):"
+    echo "       1. https://${ADMIN_DOMAIN:-<admin-domain>}/admin oeffnen, einloggen."
+    echo "       2. ttyd-Terminal oeffnen → 'claude setup-token' laeuft automatisch."
+    echo "       3. URL autorisieren, Code zurueck ins Terminal (Token → claude_home-Volume)."
     echo ""
 }
 
@@ -274,6 +275,91 @@ setup_user() {
     [ -z "$username" ] && { print_err "Kein Username."; return 1; }
     print_info "Passwort min. 12 Zeichen (bcrypt cost 13)."
     $APP_TTY php bin/console app:create-user "$username"
+}
+
+_sudo() { if [ "$(id -u)" = 0 ]; then "$@"; else sudo "$@"; fi; }
+
+setup_nginx_vhost() {
+    print_header "nginx vHost einrichten (Host-Reverse-Proxy vor od-admin)"
+    print_sep
+    if ! command -v nginx >/dev/null 2>&1; then
+        print_err "nginx nicht installiert."
+        confirm "Jetzt installieren (apt)?" \
+            && { _sudo apt update && _sudo apt install -y nginx; } \
+            || { print_info "Abgebrochen."; return 1; }
+    fi
+    ADMIN_DOMAIN=$(ask_default "Admin-Domain" "${ADMIN_DOMAIN:-admin.example.com}")
+    local port; port=$(grep -E '^OD_ADMIN_PORT=' "$SCRIPT_DIR/.env" 2>/dev/null | cut -d= -f2); port="${port:-8082}"
+
+    # Erreichbarkeit des Containers auf dem veroeffentlichten Host-Port.
+    if curl -sf "http://127.0.0.1:${port}/admin/login" >/dev/null 2>&1; then
+        print_ok "od-admin erreichbar auf 127.0.0.1:${port}"
+    else
+        print_err "od-admin NICHT erreichbar auf 127.0.0.1:${port} — erst Container starten (Punkt 87/6)."
+        confirm "Trotzdem fortfahren?" || return 1
+    fi
+
+    # DNS-Check (getent, kein dig noetig).
+    local server_ip dns_ip
+    server_ip=$(curl -sf4 https://ifconfig.me 2>/dev/null || echo "unbekannt")
+    dns_ip=$(getent hosts "$ADMIN_DOMAIN" 2>/dev/null | awk '{print $1}' | head -1)
+    if [ -n "$dns_ip" ] && [ "$dns_ip" = "$server_ip" ]; then
+        print_ok "DNS: $ADMIN_DOMAIN → $dns_ip (passt)"
+    else
+        print_info "DNS: $ADMIN_DOMAIN → ${dns_ip:-nicht aufloesbar} / Server-IP: $server_ip"
+        confirm "Trotzdem fortfahren?" || { print_info "Abgebrochen."; return 1; }
+    fi
+
+    local tpl="$SCRIPT_DIR/deploy/nginx/od-admin.example.conf"
+    local dst="/etc/nginx/sites-available/od-admin"
+    [ -f "$tpl" ] || { print_err "Template fehlt: $tpl"; return 1; }
+    if [ -f "$dst" ]; then
+        _sudo cp "$dst" "${dst}.bak-$(date +%Y%m%d-%H%M%S)"
+        print_info "Bestehenden vHost gesichert"
+        confirm "Ueberschreiben?" || { print_info "Abgebrochen."; return 1; }
+    fi
+    local domain_esc; domain_esc=$(printf '%s' "$ADMIN_DOMAIN" | sed 's/\./\\./g')
+    _sudo cp "$tpl" "$dst"
+    _sudo sed -i "s/admin\\.example\\.com/$domain_esc/g" "$dst"
+    # Upstream auf den tatsaechlich veroeffentlichten Host-Port korrigieren.
+    _sudo sed -i -E "s|server 127\\.0\\.0\\.1:8080;|server 127.0.0.1:${port};|" "$dst"
+    _sudo ln -sf "$dst" /etc/nginx/sites-enabled/od-admin
+    print_info "Teste nginx-Konfig..."
+    if _sudo nginx -t; then
+        _sudo systemctl reload nginx && print_ok "nginx neu geladen (HTTP aktiv, noch ohne TLS)."
+        print_info "Naechster Schritt: SSL-Zertifikat → Menuepunkt 93."
+    else
+        print_err "nginx -t fehlgeschlagen — vHost pruefen, NICHT reloaded."; return 1
+    fi
+    _save_state
+}
+
+setup_ssl() {
+    print_header "SSL-Zertifikat (Let's Encrypt / certbot)"
+    print_sep
+    if ! command -v certbot >/dev/null 2>&1; then
+        print_err "certbot nicht installiert."
+        confirm "Jetzt installieren (nginx-Plugin)?" \
+            && { _sudo apt update && _sudo apt install -y certbot python3-certbot-nginx; } \
+            || { print_info "Abgebrochen."; return 1; }
+    fi
+    ADMIN_DOMAIN=$(ask_default "Admin-Domain" "${ADMIN_DOMAIN:-admin.example.com}")
+    if [ ! -e "/etc/nginx/sites-enabled/od-admin" ]; then
+        print_err "Kein od-admin vHost aktiv — erst Menuepunkt 92."; return 1
+    fi
+    echo ""
+    print_info "certbot fordert das Zertifikat an und passt den vHost automatisch an."
+    print_info "Beim ersten Mal: E-Mail eingeben + Redirect HTTP→HTTPS bestaetigen."
+    confirm "DNS-A-Record von $ADMIN_DOMAIN zeigt bereits auf diesen Server?" \
+        || { print_info "Erst DNS setzen, dann erneut."; return 1; }
+    if _sudo certbot --nginx -d "$ADMIN_DOMAIN"; then
+        _sudo nginx -t && _sudo systemctl reload nginx
+        print_ok "TLS aktiv: https://$ADMIN_DOMAIN/admin"
+        print_info "Auto-Renewal laeuft via certbot.timer (systemctl status certbot.timer)."
+    else
+        print_err "certbot fehlgeschlagen — Ausgabe oben pruefen (DNS? Port 80 offen?)."; return 1
+    fi
+    _save_state
 }
 
 run_setup_all() {
@@ -345,6 +431,9 @@ _MITEMS=(
   "87:Admin-User anlegen"
   "88:Abschluss (Smoke + OAuth)"
   "89:Einrichtungs-Status"
+  "G:Reverse-Proxy & TLS"
+  "92:nginx vHost einrichten"
+  "93:SSL-Zertifikat (certbot)"
   "G:Deploy & Backup"
   "7:Backup jetzt ausfuehren"
   "71:Backup-Liste anzeigen"
@@ -855,6 +944,10 @@ case $option in
     87) setup_user ;;
     88) setup_finish ;;
     89) setup_status ;;
+
+    # Reverse-Proxy & TLS
+    92) setup_nginx_vhost ;;
+    93) setup_ssl ;;
 
     # Deploy & Backup
     7)
