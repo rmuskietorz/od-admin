@@ -22,6 +22,30 @@ ask_secret() {
 ask_default() { local _a; read -r -p "  $1 [$2]: " _a; echo "${_a:-$2}"; }
 confirm()     { local _a; read -r -p "  $1 (y/n): " _a; [ "$_a" = "y" ]; }
 
+# Volume-Auswahl fuer Backup/Restore. Gibt die gewaehlten Keys (Space-getrennt)
+# auf stdout aus; Prompts gehen nach stderr (damit $(...) nur Keys faengt).
+_choose_volumes() {
+    {
+        echo "  Welche Volumes?"
+        echo "    1) Alle"
+        echo "    2) Open Design  (Designs/Projekte/Artefakte)"
+        echo "    3) od-admin     (User-DB + Audit-Log + Token)"
+        echo "    4) Claude-State"
+    } >&2
+    local _c; read -r -p "  Auswahl (Nummern, Leerzeichen-getrennt) [1]: " _c
+    _c="${_c:-1}"
+    local n keys=""
+    for n in $_c; do
+        case "$n" in
+            1) echo "od_admin_data open_design_data claude_home"; return 0 ;;
+            2) keys="$keys open_design_data" ;;
+            3) keys="$keys od_admin_data" ;;
+            4) keys="$keys claude_home" ;;
+        esac
+    done
+    echo "${keys# }"
+}
+
 # ─── Server-Einrichtung: Config + Helfer ──────────────────────────────────────
 # Erst-Installation laeuft ueber das gleiche Menue (Gruppe "Server-Einrichtung").
 
@@ -991,9 +1015,12 @@ case $option in
 
     # Deploy & Backup
     7)
-        print_info "Backup ausfuehren..."
+        print_header "Backup — Volumes sichern"
+        _bkkeys="$(_choose_volumes)"
+        [ -z "$_bkkeys" ] && { print_err "Keine Auswahl."; continue; }
         if [ -x "$SCRIPT_DIR/deploy/scripts/backup.sh" ]; then
-            sudo "$SCRIPT_DIR/deploy/scripts/backup.sh"
+            # shellcheck disable=SC2086
+            _sudo bash "$SCRIPT_DIR/deploy/scripts/backup.sh" $_bkkeys
         else
             print_err "deploy/scripts/backup.sh nicht gefunden / nicht executable"
         fi
@@ -1023,11 +1050,14 @@ case $option in
         ;;
     74)
         print_header "Volumes wiederherstellen (Restore)"
-        echo -e "  ${RED}${BOLD}DESTRUKTIV:${RESET} ueberschreibt aktuelle Volume-Inhalte"
-        echo -e "  (Designs, User-DB, Claude-State) aus einem Backup-Snapshot."
+        echo -e "  ${RED}${BOLD}DESTRUKTIV:${RESET} ueberschreibt aktuelle Volume-Inhalte aus einem Snapshot."
+        _rskeys="$(_choose_volumes)"
+        [ -z "$_rskeys" ] && { print_err "Keine Auswahl."; continue; }
         _rsscript="$SCRIPT_DIR/deploy/scripts/restore.sh"
         if [ -x "$_rsscript" ]; then
-            _sudo bash "$_rsscript"
+            # SRC="" -> Snapshot wird interaktiv gewaehlt; danach die Keys.
+            # shellcheck disable=SC2086
+            _sudo bash "$_rsscript" "" $_rskeys
         else
             print_err "$_rsscript nicht gefunden/executable"
         fi

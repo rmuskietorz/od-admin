@@ -36,9 +36,10 @@ resolve_volume() {
     docker volume ls --format '{{.Name}}' | grep -E "(^|_)${want}\$" | head -1
 }
 
-# ── Snapshot waehlen ─────────────────────────────────────────────────────────
+# ── Snapshot + Volume-Auswahl ────────────────────────────────────────────────
 SRC="${1:-}"
-ONLY="${2:-}"
+shift || true
+SEL_KEYS="$*"   # leer = alle im Snapshot vorhandenen
 
 if [ -z "$SRC" ]; then
     log "Verfuegbare Backups in ${TARGET_BASE}:"
@@ -59,7 +60,9 @@ log "Quelle: $SRC"
 # ── Welche Volumes sind im Snapshot? ─────────────────────────────────────────
 VOLS=()
 for key in od_admin_data open_design_data claude_home; do
-    [ -n "$ONLY" ] && [ "$ONLY" != "$key" ] && continue
+    if [ -n "$SEL_KEYS" ]; then
+        case " $SEL_KEYS " in *" $key "*) : ;; *) continue ;; esac
+    fi
     [ -f "$SRC/${key}.tar.gz" ] && VOLS+=("$key")
 done
 [ "${#VOLS[@]}" -eq 0 ] && { err "Keine passenden *.tar.gz im Snapshot."; exit 1; }

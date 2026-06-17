@@ -1,16 +1,20 @@
 #!/bin/bash
 # Backup-Skript fuer od-admin + open-design Volumes.
-# Sichert: SQLite User-DB, OD-Projekte/Artefakte, Claude-Credentials.
+# Sichert: SQLite User-DB, OD-Projekte/Artefakte, Claude-State.
 #
 # Usage:
-#   ./backup.sh [target-dir]
+#   ./backup.sh                         # alle Volumes
+#   ./backup.sh open_design_data        # nur einzelne(s) Volume(s)
+#   BACKUP_BASE=/pfad ./backup.sh ...   # Zielbasis ueberschreiben
 #
 # Default target: /var/backups/od-admin/<timestamp>/
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TARGET_BASE="${1:-/var/backups/od-admin}"
+TARGET_BASE="${BACKUP_BASE:-/var/backups/od-admin}"
+ALL_KEYS="od_admin_data open_design_data claude_home"
+KEYS="${*:-$ALL_KEYS}"
 TS="$(date +%Y%m%d-%H%M%S)"
 TARGET="${TARGET_BASE}/${TS}"
 
@@ -52,7 +56,8 @@ resolve_volume() {
     docker volume ls --format '{{.Name}}' | grep -E "(^|_)${want}\$" | head -1
 }
 
-for v in od_admin_data open_design_data claude_home; do
+log "Sichere Volumes: ${KEYS}"
+for v in $KEYS; do
     real="$(resolve_volume "$v")"
     if [ -n "$real" ]; then
         backup_volume "$real" "${TARGET}/${v}.tar.gz"
