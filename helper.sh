@@ -236,7 +236,14 @@ EOF
         port=$(ask_default "Alternativer od-admin Host-Port" "$((port+1))")
     done
     upsert_env "$envmain" "OD_ADMIN_PORT" "$port"
-    print_ok ".env: HOST_OD_DEPLOY_DIR, OD_ADMIN_RESTART=unless-stopped, OD_ADMIN_PORT=$port"
+    # Docker-Socket-GID, damit uid 1000 den Socket lesen darf (group_add).
+    local dgid; dgid=$(stat -c '%g' /var/run/docker.sock 2>/dev/null)
+    if [ -n "$dgid" ]; then
+        upsert_env "$envmain" "DOCKER_GID" "$dgid"
+        print_ok ".env: HOST_OD_DEPLOY_DIR, OD_ADMIN_RESTART, OD_ADMIN_PORT=$port, DOCKER_GID=$dgid"
+    else
+        print_info ".env: Port/Restart gesetzt; DOCKER_GID nicht ermittelbar (Socket?)."
+    fi
     _save_state
 }
 

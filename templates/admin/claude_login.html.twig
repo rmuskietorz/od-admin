@@ -2,28 +2,51 @@
 
 {% block title %}Claude Login · od-admin{% endblock %}
 
+{% block stylesheets %}
+<style>
+    .term-frame { padding: 0; overflow: hidden; }
+    .term-bar { display: flex; align-items: center; gap: 8px; padding: 11px 16px;
+                background: rgba(0,0,0,0.35); border-bottom: 1px solid var(--border-soft); }
+    .term-bar .dots { display: flex; gap: 7px; }
+    .term-bar .dots i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+    .term-bar .dots i:nth-child(1) { background: #ff5f57; }
+    .term-bar .dots i:nth-child(2) { background: #febc2e; }
+    .term-bar .dots i:nth-child(3) { background: #28c840; }
+    .term-bar .label { font-family: var(--font-mono); font-size: 12px; color: var(--fg-mute);
+                       margin-left: 6px; }
+    .term-frame iframe { width: 100%; height: 600px; border: 0; background: #000; display: block; }
+</style>
+{% endblock %}
+
 {% block body %}
-    <h1 style="margin-top: 0;">Claude CLI Login</h1>
-
-    <div class="card">
-        <p>
-            Das Terminal unten startet <code>claude setup-token</code> im Open-Design Container.
-            Die ausgegebene URL in einem <strong>neuen Browser-Tab</strong> öffnen, mit deinem
-            Claude Pro/Max Account einloggen, und den zurückgegebenen Code unten ins Terminal einfügen.
-        </p>
-        <p>
-            Credentials werden im Volume <code>claude_home</code> gespeichert und überleben
-            Container-Restarts.
+    <div class="page-head reveal">
+        <div class="eyebrow">Claude CLI · OAuth</div>
+        <h1>Claude Login</h1>
+        <p class="sub">
+            Einmalige Anmeldung der gebündelten Claude CLI über deinen Pro/Max-Account.
+            Der Token landet im Volume <span class="text-mono">claude_home</span> und überlebt
+            Container-Restarts und Updates.
         </p>
     </div>
 
-    <div class="card" style="padding: 0; overflow: hidden;">
-        <iframe src="/admin/ttyd/"
-                style="width: 100%; height: 600px; border: 0; background: #000;"
-                title="Claude Login Terminal"></iframe>
+    <div class="card reveal" style="animation-delay:.06s">
+        <div class="card-title">So geht's</div>
+        <ol class="steps">
+            <li>Im Terminal unten startet automatisch <strong>claude setup-token</strong> und zeigt eine URL.</li>
+            <li>URL in einem <strong>neuen Browser-Tab</strong> öffnen und mit deinem Claude-Account autorisieren.</li>
+            <li>Den zurückgegebenen <strong>Code</strong> kopieren und unten ins Terminal einfügen.</li>
+        </ol>
     </div>
 
-    <div style="margin-top: 16px;">
-        <a href="{{ path('app_dashboard') }}" class="btn">Zurück zum Dashboard</a>
+    <div class="card term-frame reveal" style="animation-delay:.12s">
+        <div class="term-bar">
+            <span class="dots"><i></i><i></i><i></i></span>
+            <span class="label">claude@open-design-claude — setup-token</span>
+        </div>
+        <iframe src="/admin/ttyd/" title="Claude Login Terminal"></iframe>
+    </div>
+
+    <div class="btn-row">
+        <a href="{{ path('app_dashboard') }}" class="btn ghost">← Zurück zum Dashboard</a>
     </div>
 {% endblock %}

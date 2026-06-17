@@ -3,60 +3,61 @@
 {% block title %}Audit-Log · od-admin{% endblock %}
 
 {% block body %}
-    <h1 style="margin-top: 0;">Audit-Log – Login-Versuche</h1>
-
-    <div class="card">
-        <p style="margin-top: 0; color: #aaa;">
-            Letzte 100 Login-Versuche. Bei 5 Fehlversuchen in 1 Minute pro IP+Username
-            sperrt Symfony automatisch (login_throttling).
+    <div class="page-head reveal">
+        <div class="eyebrow">Sicherheit · Zugriffe</div>
+        <h1>Audit-Log</h1>
+        <p class="sub">
+            Letzte 100 Login-Versuche. Bei 5 Fehlversuchen pro Minute (IP + Username)
+            sperrt Symfony automatisch via <span class="text-mono">login_throttling</span>.
         </p>
+    </div>
+
+    <div class="card reveal" style="animation-delay:.06s">
+        <div class="card-title">Login-Versuche</div>
 
         {% if attempts is empty %}
-            <p>Noch keine Eintraege.</p>
+            <div class="empty-state">Noch keine Einträge.</div>
         {% else %}
-            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-                <thead>
-                    <tr style="text-align: left; border-bottom: 1px solid rgba(255,255,255,0.2);">
-                        <th style="padding: 8px;">Zeit</th>
-                        <th style="padding: 8px;">User</th>
-                        <th style="padding: 8px;">IP</th>
-                        <th style="padding: 8px;">Status</th>
-                        <th style="padding: 8px;">Grund</th>
-                        <th style="padding: 8px;">User-Agent</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for a in attempts %}
-                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                            <td style="padding: 6px 8px; white-space: nowrap;">
-                                {{ a.createdAt|date('Y-m-d H:i:s') }}
-                            </td>
-                            <td style="padding: 6px 8px;"><code>{{ a.username }}</code></td>
-                            <td style="padding: 6px 8px;"><code>{{ a.ip }}</code></td>
-                            <td style="padding: 6px 8px;">
-                                {% if a.success %}
-                                    <span class="badge ok">OK</span>
-                                {% else %}
-                                    <span class="badge err">FAIL</span>
-                                {% endif %}
-                            </td>
-                            <td style="padding: 6px 8px; color: #aaa; font-size: 12px;">
-                                {{ a.reason ?? '–' }}
-                            </td>
-                            <td style="padding: 6px 8px; color: #aaa; font-size: 11px;
-                                       max-width: 300px; overflow: hidden;
-                                       text-overflow: ellipsis; white-space: nowrap;"
-                                title="{{ a.userAgent }}">
-                                {{ a.userAgent|default('–')|slice(0, 60) }}
-                            </td>
+            <div class="table-wrap">
+                <table class="data">
+                    <thead>
+                        <tr>
+                            <th>Zeit</th>
+                            <th>User</th>
+                            <th>IP</th>
+                            <th>Status</th>
+                            <th>Grund</th>
+                            <th>User-Agent</th>
                         </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        {% for a in attempts %}
+                            <tr>
+                                <td class="text-mono" style="white-space: nowrap;">{{ a.createdAt|date('Y-m-d H:i:s') }}</td>
+                                <td><code>{{ a.username }}</code></td>
+                                <td><code>{{ a.ip }}</code></td>
+                                <td>
+                                    {% if a.success %}
+                                        <span class="badge ok">ok</span>
+                                    {% else %}
+                                        <span class="badge err">fail</span>
+                                    {% endif %}
+                                </td>
+                                <td class="muted" style="font-size: 12px;">{{ a.reason ?? '–' }}</td>
+                                <td class="muted" style="font-size: 11px; max-width: 300px; overflow: hidden;
+                                           text-overflow: ellipsis; white-space: nowrap;"
+                                    title="{{ a.userAgent }}">
+                                    {{ a.userAgent|default('–')|slice(0, 60) }}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         {% endif %}
     </div>
 
-    <div style="margin-top: 16px;">
-        <a href="{{ path('app_dashboard') }}" class="btn">Zurück zum Dashboard</a>
+    <div class="btn-row">
+        <a href="{{ path('app_dashboard') }}" class="btn ghost">← Zurück zum Dashboard</a>
     </div>
 {% endblock %}

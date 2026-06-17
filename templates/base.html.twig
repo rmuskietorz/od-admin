@@ -4,68 +4,283 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}od-admin{% endblock %}</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://api.fontshare.com">
+    <link href="https://api.fontshare.com/v2/css?f[]=satoshi@500,700,900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
     <style>
         :root {
-            --bg: #0d3047;
-            --fg: #dbd6ca;
-            --accent: #1db1a3;
-            --accent2: #287fd9;
-            --err: #e74c3c;
-            --ok: #2ecc71;
-            --border: rgba(255,255,255,0.1);
+            /* ── Palette (RM Brand, vertieft) ───────────────────────── */
+            --navy-900: #061a25;
+            --navy-800: #0a2738;
+            --navy-700: #0d3047;
+            --teal:     #1db1a3;
+            --teal-2:   #2ad4c3;
+            --blue:     #287fd9;
+            --neutral:  #dbd6ca;
+            --fg:       #ece8dd;
+            --fg-dim:   rgba(219, 214, 202, 0.66);
+            --fg-mute:  rgba(219, 214, 202, 0.40);
+            --ok:       #34d399;
+            --err:      #ff6b6b;
+            --warn:     #f7b955;
+            --border:        rgba(219, 214, 202, 0.12);
+            --border-soft:   rgba(219, 214, 202, 0.07);
+            --border-strong: rgba(219, 214, 202, 0.22);
+            --surface:   rgba(255, 255, 255, 0.035);
+            --surface-2: rgba(255, 255, 255, 0.06);
+
+            --font-display: 'Satoshi', 'Geist', system-ui, sans-serif;
+            --font-body: 'Geist', system-ui, -apple-system, sans-serif;
+            --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+            --radius: 16px;
+            --radius-sm: 10px;
+            --shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.75);
+            --glow-teal: 0 0 0 1px rgba(29, 177, 163, 0.35), 0 14px 40px -16px rgba(29, 177, 163, 0.45);
         }
+
         * { box-sizing: border-box; }
-        html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
-                     font-family: 'Inter', system-ui, sans-serif; line-height: 1.5; }
-        a { color: var(--accent); text-decoration: none; }
-        a:hover { text-decoration: underline; }
-        .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
-        header.top { display: flex; align-items: center; gap: 24px; padding: 16px 24px;
-                     border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.2); }
-        header.top .brand { font-weight: 700; color: var(--accent); }
-        header.top nav { display: flex; gap: 16px; }
+
+        html, body {
+            margin: 0; padding: 0;
+            background: var(--navy-900);
+            color: var(--fg);
+            font-family: var(--font-body);
+            line-height: 1.55;
+            -webkit-font-smoothing: antialiased;
+            text-rendering: optimizeLegibility;
+        }
+
+        /* ── Atmosphäre: Gradient-Mesh + Grid + Grain ───────────────── */
+        body::before {
+            content: ""; position: fixed; inset: 0; z-index: -2;
+            background:
+                radial-gradient(110% 80% at 12% -10%, rgba(29, 177, 163, 0.20), transparent 55%),
+                radial-gradient(100% 90% at 100% 0%, rgba(40, 127, 217, 0.18), transparent 50%),
+                radial-gradient(120% 120% at 50% 120%, rgba(13, 48, 71, 0.9), transparent 60%),
+                linear-gradient(180deg, var(--navy-800), var(--navy-900));
+        }
+        body::after {
+            content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+            opacity: 0.5;
+            background-image:
+                linear-gradient(rgba(219, 214, 202, 0.035) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(219, 214, 202, 0.035) 1px, transparent 1px),
+                url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E");
+            background-size: 48px 48px, 48px 48px, 160px 160px;
+            mask-image: radial-gradient(120% 100% at 50% 0%, #000 30%, transparent 90%);
+        }
+
+        a { color: var(--teal); text-decoration: none; transition: color .18s ease; }
+        a:hover { color: var(--teal-2); }
+
+        h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.02em; }
+        code, pre, .mono { font-family: var(--font-mono); }
+
+        .container { max-width: 1140px; margin: 0 auto; padding: 40px 28px 72px; }
+
+        /* ── Topbar ─────────────────────────────────────────────────── */
+        header.top {
+            position: sticky; top: 0; z-index: 50;
+            display: flex; align-items: center; gap: 14px;
+            padding: 14px 28px;
+            background: rgba(6, 26, 37, 0.72);
+            backdrop-filter: blur(14px) saturate(140%);
+            -webkit-backdrop-filter: blur(14px) saturate(140%);
+            border-bottom: 1px solid var(--border-soft);
+        }
+        .brand { display: flex; align-items: center; gap: 11px; font-family: var(--font-display);
+                 font-weight: 900; letter-spacing: -0.03em; font-size: 18px; color: var(--fg); }
+        .brand .mark { width: 28px; height: 28px; filter: drop-shadow(0 2px 8px rgba(29,177,163,.6)); }
+        .brand small { font-family: var(--font-mono); font-weight: 400; font-size: 10px;
+                       letter-spacing: 0.18em; text-transform: uppercase; color: var(--fg-mute);
+                       border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; margin-left: 2px; }
+        header.top nav { display: flex; gap: 4px; margin-left: 18px; }
+        header.top nav a {
+            position: relative; color: var(--fg-dim); font-size: 14px; font-weight: 500;
+            padding: 7px 13px; border-radius: 9px; transition: all .18s ease;
+        }
+        header.top nav a:hover { color: var(--fg); background: var(--surface); }
+        header.top nav a.active { color: var(--teal); background: rgba(29,177,163,0.10); }
+        header.top nav a.ext::after { content: "↗"; margin-left: 5px; font-size: 11px; opacity: .6; }
         header.top .spacer { flex: 1; }
+        .who { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--fg-dim);
+               font-family: var(--font-mono); }
+        .who .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok);
+                    box-shadow: 0 0 0 3px rgba(52,211,153,.18); }
+
+        /* ── Page heading ───────────────────────────────────────────── */
+        .page-head { margin: 4px 0 30px; }
+        .page-head .eyebrow { font-family: var(--font-mono); font-size: 11px; letter-spacing: .22em;
+                              text-transform: uppercase; color: var(--teal); margin-bottom: 10px; }
+        .page-head h1 { margin: 0; font-size: clamp(30px, 5vw, 46px); font-weight: 900;
+                        background: linear-gradient(100deg, var(--fg) 30%, var(--neutral) 70%);
+                        -webkit-background-clip: text; background-clip: text;
+                        -webkit-text-fill-color: transparent; }
+        .page-head p.sub { margin: 8px 0 0; color: var(--fg-dim); max-width: 62ch; }
+
+        /* ── Cards ──────────────────────────────────────────────────── */
+        .card {
+            position: relative; background: var(--surface);
+            border: 1px solid var(--border); border-radius: var(--radius);
+            padding: 26px; margin-bottom: 22px; box-shadow: var(--shadow);
+            backdrop-filter: blur(6px);
+        }
+        .card::before {
+            content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+            background: linear-gradient(180deg, rgba(255,255,255,0.06), transparent 26%);
+        }
+        .card-title { display: flex; align-items: center; gap: 10px; margin: 0 0 20px;
+                      font-size: 13px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+                      color: var(--fg-dim); font-family: var(--font-mono); }
+        .card-title::before { content: ""; width: 9px; height: 9px; border-radius: 3px;
+                              background: var(--teal); box-shadow: 0 0 12px var(--teal); }
+
+        .reveal { opacity: 0; transform: translateY(14px); animation: reveal .6s cubic-bezier(.2,.7,.2,1) forwards; }
+        @keyframes reveal { to { opacity: 1; transform: none; } }
+
+        /* ── Stat grid ──────────────────────────────────────────────── */
+        .stat-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+        .stat { padding: 16px 18px; border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
+                background: rgba(0,0,0,0.18); }
+        .stat .k { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .16em;
+                   text-transform: uppercase; color: var(--fg-mute); margin-bottom: 9px; }
+        .stat .v { font-size: 16px; font-weight: 500; word-break: break-word; }
+        .stat .v.mono { font-family: var(--font-mono); font-size: 13px; color: var(--neutral); }
+
+        /* ── Buttons ────────────────────────────────────────────────── */
         button, .btn {
-            background: var(--accent); color: #fff; border: 0; padding: 10px 16px;
-            border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px;
+            display: inline-flex; align-items: center; gap: 8px; justify-content: center;
+            background: linear-gradient(180deg, var(--teal-2), var(--teal));
+            color: #04231f; border: 0; padding: 11px 18px; border-radius: var(--radius-sm);
+            font-family: var(--font-body); font-weight: 600; font-size: 14px; cursor: pointer;
+            transition: transform .14s ease, box-shadow .2s ease, background .2s ease, opacity .2s ease;
+            box-shadow: 0 8px 24px -12px rgba(29,177,163,.8);
         }
-        button:hover, .btn:hover { background: #18958a; }
-        button.secondary { background: var(--accent2); }
-        button.danger { background: var(--err); }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
-        .card { background: rgba(255,255,255,0.05); border: 1px solid var(--border);
-                border-radius: 8px; padding: 20px; margin-bottom: 16px; }
-        .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
-        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px;
-                 font-size: 12px; font-weight: 600; }
-        .badge.ok  { background: var(--ok); color: #000; }
-        .badge.err { background: var(--err); color: #fff; }
-        .badge.warn { background: #f39c12; color: #000; }
-        pre { background: #000; color: #0f0; padding: 12px; border-radius: 6px;
-              overflow: auto; max-height: 500px; font-size: 12px; }
+        button:hover, .btn:hover { transform: translateY(-2px); box-shadow: var(--glow-teal); }
+        button:active, .btn:active { transform: translateY(0); }
+        button.secondary, .btn.secondary {
+            background: var(--surface-2); color: var(--fg); box-shadow: none;
+            border: 1px solid var(--border-strong);
+        }
+        button.secondary:hover, .btn.secondary:hover { border-color: var(--blue); color: #fff;
+            box-shadow: 0 10px 30px -16px rgba(40,127,217,.8); background: rgba(40,127,217,0.14); }
+        button.danger, .btn.danger {
+            background: transparent; color: var(--err); box-shadow: none;
+            border: 1px solid rgba(255,107,107,0.4);
+        }
+        button.danger:hover, .btn.danger:hover { background: rgba(255,107,107,0.12); color: #fff;
+            border-color: var(--err); transform: translateY(-2px); }
+        button.ghost, .btn.ghost { background: transparent; color: var(--fg-dim);
+            border: 1px solid var(--border); box-shadow: none; }
+        button.ghost:hover, .btn.ghost:hover { color: var(--fg); border-color: var(--border-strong);
+            background: var(--surface); }
+        button:disabled { opacity: .45; cursor: not-allowed; transform: none; box-shadow: none; }
+        .btn-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+        /* ── Badges / status ────────────────────────────────────────── */
+        .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px;
+                 border-radius: 999px; font-size: 12px; font-weight: 600; font-family: var(--font-mono);
+                 letter-spacing: .03em; border: 1px solid transparent; }
+        .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+        .badge.ok   { color: var(--ok);  background: rgba(52,211,153,.12); border-color: rgba(52,211,153,.3); }
+        .badge.err  { color: var(--err); background: rgba(255,107,107,.12); border-color: rgba(255,107,107,.3); }
+        .badge.warn { color: var(--warn);background: rgba(247,185,85,.12); border-color: rgba(247,185,85,.3); }
+        .badge.ok::before  { animation: pulse 2s ease-in-out infinite; }
+        @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(52,211,153,.5); } 50% { box-shadow: 0 0 0 5px rgba(52,211,153,0); } }
+
+        /* ── Output / terminal ──────────────────────────────────────── */
+        pre {
+            background: rgba(0,0,0,0.5); color: #c8f7ec; padding: 16px;
+            border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
+            overflow: auto; max-height: 460px; font-size: 12.5px; line-height: 1.6;
+            font-family: var(--font-mono);
+        }
+        pre::-webkit-scrollbar { width: 10px; height: 10px; }
+        pre::-webkit-scrollbar-thumb { background: rgba(29,177,163,.3); border-radius: 99px; }
+
+        /* ── Forms ──────────────────────────────────────────────────── */
+        label { display: block; margin-bottom: 8px; font-weight: 500; font-size: 13px;
+                color: var(--fg-dim); font-family: var(--font-mono); letter-spacing: .04em; }
         .form-input {
-            width: 100%; padding: 10px 12px; border-radius: 6px;
-            border: 1px solid var(--border); background: rgba(0,0,0,0.3);
-            color: var(--fg); font-size: 14px;
+            width: 100%; padding: 13px 15px; border-radius: var(--radius-sm);
+            border: 1px solid var(--border); background: rgba(0,0,0,0.32);
+            color: var(--fg); font-size: 15px; font-family: var(--font-body);
+            transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
         }
-        label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 13px; }
-        .form-group { margin-bottom: 16px; }
-        .error { color: var(--err); margin-bottom: 12px; }
+        .form-input:focus { outline: 0; border-color: var(--teal);
+            box-shadow: 0 0 0 4px rgba(29,177,163,.16); background: rgba(0,0,0,0.45); }
+        .form-input::placeholder { color: var(--fg-mute); }
+        .form-group { margin-bottom: 18px; }
+        .check { display: flex; align-items: center; gap: 9px; color: var(--fg-dim);
+                 font-family: var(--font-body); font-size: 14px; cursor: pointer; }
+        .check input { accent-color: var(--teal); width: 16px; height: 16px; }
+        .error { display: flex; align-items: center; gap: 9px; color: var(--err);
+                 background: rgba(255,107,107,.10); border: 1px solid rgba(255,107,107,.28);
+                 padding: 11px 14px; border-radius: var(--radius-sm); margin-bottom: 18px; font-size: 14px; }
+
+        /* ── Table ──────────────────────────────────────────────────── */
+        .table-wrap { overflow-x: auto; border-radius: var(--radius-sm); }
+        table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
+        table.data thead th { text-align: left; padding: 11px 14px; font-family: var(--font-mono);
+            font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--fg-mute);
+            border-bottom: 1px solid var(--border); position: sticky; top: 0;
+            background: var(--navy-800); }
+        table.data tbody td { padding: 11px 14px; border-bottom: 1px solid var(--border-soft); }
+        table.data tbody tr { transition: background .15s ease; }
+        table.data tbody tr:hover { background: rgba(29,177,163,0.05); }
+        table.data code { font-size: 12px; color: var(--neutral); }
+
+        .muted { color: var(--fg-dim); }
+        .text-mono { font-family: var(--font-mono); }
+        .empty-state { text-align: center; padding: 48px 20px; color: var(--fg-mute); }
+
+        /* ── Steps (stepper) ────────────────────────────────────────── */
+        .steps { list-style: none; counter-reset: s; margin: 0; padding: 0; display: grid; gap: 14px; }
+        .steps li { counter-increment: s; position: relative; padding-left: 46px; color: var(--fg-dim); }
+        .steps li::before { content: counter(s); position: absolute; left: 0; top: -2px;
+            width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+            font-family: var(--font-mono); font-weight: 600; font-size: 13px; color: var(--teal);
+            background: rgba(29,177,163,0.10); border: 1px solid rgba(29,177,163,0.32); }
+        .steps li strong { color: var(--fg); font-weight: 600; }
+
+        @media (max-width: 720px) {
+            header.top { flex-wrap: wrap; gap: 8px; }
+            header.top nav { margin-left: 0; order: 3; width: 100%; overflow-x: auto; }
+            .who .name { display: none; }
+            .container { padding: 28px 18px 56px; }
+        }
     </style>
     {% block stylesheets %}{% endblock %}
 </head>
 <body>
 {% if app.user %}
     <header class="top">
-        <div class="brand">od-admin</div>
+        <div class="brand">
+            <svg class="mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M16 2 28 9v14L16 30 4 23V9L16 2Z" stroke="url(#g)" stroke-width="1.6" fill="rgba(29,177,163,0.08)"/>
+                <path d="M16 9v14M10 12.5 16 16l6-3.5" stroke="#2ad4c3" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="16" cy="16" r="2.2" fill="#2ad4c3"/>
+                <defs><linearGradient id="g" x1="4" y1="2" x2="28" y2="30"><stop stop-color="#2ad4c3"/><stop offset="1" stop-color="#287fd9"/></linearGradient></defs>
+            </svg>
+            od-admin <small>control plane</small>
+        </div>
         <nav>
-            <a href="{{ path('app_dashboard') }}">Dashboard</a>
-            <a href="{{ path('app_claude_login') }}">Claude Login</a>
-            <a href="{{ path('app_audit') }}">Audit-Log</a>
-            <a href="/" target="_blank">Open Design ↗</a>
+            <a href="{{ path('app_dashboard') }}" class="{{ app.request.attributes.get('_route') == 'app_dashboard' ? 'active' : '' }}">Dashboard</a>
+            <a href="{{ path('app_claude_login') }}" class="{{ app.request.attributes.get('_route') starts with 'app_claude' ? 'active' : '' }}">Claude Login</a>
+            <a href="{{ path('app_audit') }}" class="{{ app.request.attributes.get('_route') == 'app_audit' ? 'active' : '' }}">Audit-Log</a>
+            <a href="/" target="_blank" class="ext">Open Design</a>
         </nav>
         <div class="spacer"></div>
-        <div>{{ app.user.userIdentifier }} · <a href="{{ path('app_logout') }}">Logout</a></div>
+        <div class="who">
+            <span class="dot"></span>
+            <span class="name">{{ app.user.userIdentifier }}</span>
+            <a href="{{ path('app_logout') }}">Logout</a>
+        </div>
     </header>
 {% endif %}
 <main class="container">

@@ -52,6 +52,12 @@ services:
     security_opt:
       - no-new-privileges:true
     user: "1000:1000"
+    # uid 1000 muss den gemounteten Docker-Socket lesen duerfen. cap_add
+    # DAC_OVERRIDE greift fuer Nicht-root nicht zuverlaessig -> die GID der
+    # Socket-Gruppe ergaenzen. DOCKER_GID setzt die Einrichtung (helper.sh 86)
+    # automatisch aus `stat -c %g /var/run/docker.sock`.
+    group_add:
+      - "${DOCKER_GID:-999}"
     mem_limit: 256m
     pids_limit: 128
     depends_on:

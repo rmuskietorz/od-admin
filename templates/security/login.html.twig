@@ -2,38 +2,64 @@
 
 {% block title %}Login · od-admin{% endblock %}
 
+{% block stylesheets %}
+<style>
+    .login-shell { min-height: calc(100vh - 80px); display: grid; place-items: center; padding: 24px 0; }
+    .login-card { width: 100%; max-width: 380px; }
+    .login-mark { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-bottom: 28px; }
+    .login-mark svg { width: 56px; height: 56px; filter: drop-shadow(0 6px 20px rgba(29,177,163,.5)); }
+    .login-mark .name { font-family: var(--font-display); font-weight: 900; font-size: 22px;
+                        letter-spacing: -.03em; }
+    .login-mark .tag { font-family: var(--font-mono); font-size: 11px; letter-spacing: .2em;
+                       text-transform: uppercase; color: var(--fg-mute); }
+</style>
+{% endblock %}
+
 {% block body %}
-    <div style="max-width: 360px; margin: 80px auto;">
-        <div class="card">
-            <h2 style="margin-top: 0;">Login</h2>
+    <div class="login-shell">
+        <div class="login-card reveal">
+            <div class="login-mark">
+                <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M16 2 28 9v14L16 30 4 23V9L16 2Z" stroke="url(#lg)" stroke-width="1.6" fill="rgba(29,177,163,0.08)"/>
+                    <path d="M16 9v14M10 12.5 16 16l6-3.5" stroke="#2ad4c3" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                    <circle cx="16" cy="16" r="2.2" fill="#2ad4c3"/>
+                    <defs><linearGradient id="lg" x1="4" y1="2" x2="28" y2="30"><stop stop-color="#2ad4c3"/><stop offset="1" stop-color="#287fd9"/></linearGradient></defs>
+                </svg>
+                <div class="name">od-admin</div>
+                <div class="tag">control plane · anmeldung</div>
+            </div>
 
-            {% if error %}
-                <div class="error">{{ error.messageKey|trans(error.messageData, 'security') }}</div>
-            {% endif %}
+            <div class="card" style="margin-bottom: 0;">
+                {% if error %}
+                    <div class="error">⚠ {{ error.messageKey|trans(error.messageData, 'security') }}</div>
+                {% endif %}
 
-            <form method="post">
-                <div class="form-group">
-                    <label for="username">Username</label>
-                    <input type="text" id="username" name="_username" value="{{ last_username }}"
-                           class="form-input" autofocus required autocomplete="username">
-                </div>
+                <form method="post">
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" name="_username" value="{{ last_username }}"
+                               class="form-input" autofocus required autocomplete="username"
+                               placeholder="admin">
+                    </div>
 
-                <div class="form-group">
-                    <label for="password">Passwort</label>
-                    <input type="password" id="password" name="_password"
-                           class="form-input" required autocomplete="current-password">
-                </div>
+                    <div class="form-group">
+                        <label for="password">Passwort</label>
+                        <input type="password" id="password" name="_password"
+                               class="form-input" required autocomplete="current-password"
+                               placeholder="••••••••••••">
+                    </div>
 
-                <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}">
 
-                <div class="form-group">
-                    <label style="font-weight: 400;">
-                        <input type="checkbox" name="_remember_me"> Eingeloggt bleiben
-                    </label>
-                </div>
+                    <div class="form-group">
+                        <label class="check" style="margin: 0;">
+                            <input type="checkbox" name="_remember_me"> Eingeloggt bleiben
+                        </label>
+                    </div>
 
-                <button type="submit" style="width: 100%;">Anmelden</button>
-            </form>
+                    <button type="submit" style="width: 100%;">Anmelden →</button>
+                </form>
+            </div>
         </div>
     </div>
 {% endblock %}
