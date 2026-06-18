@@ -496,7 +496,7 @@ _MITEMS=(
   "53:fail2ban Status (Host)"
   "54:fail2ban aktivieren (Configs + restart)"
   "G:Open Design Steuerung"
-  "6:OD-Status (via DockerClient)"
+  "6:OD-Status"
   "61:OD restart"
   "62:OD update (pull + up)"
   "63:OD Logs streamen"
@@ -1013,34 +1013,48 @@ case $option in
         fi
         ;;
 
-    # OD Steuerung (via curl auf eigene API)
+    # OD-Steuerung (direkte docker-Befehle auf dem Host — kein Web-Auth noetig)
     6)
-        print_header "OD Status"
-        $APP curl -s http://127.0.0.1:8080/admin/status 2>/dev/null \
-            | python3 -m json.tool 2>/dev/null \
-            || print_err "Status nicht erreichbar (od-admin laeuft? eingeloggt?)"
+        print_header "OD-Status"
+        docker ps --filter name=open-design-claude \
+            --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' 2>/dev/null \
+            || print_err "docker nicht erreichbar"
+        echo ""
+        docker exec -u open-design open-design-claude claude --version 2>/dev/null \
+            && docker exec open-design-claude sh -c 'test -n "$CLAUDE_CODE_OAUTH_TOKEN" && echo "OAuth-Token: vorhanden" || echo "OAuth-Token: fehlt"' 2>/dev/null \
+            || print_err "OD-Container laeuft nicht"
         ;;
     61)
-        print_info "OD restart triggern (POST /admin/restart)..."
-        $APP curl -s -X POST http://127.0.0.1:8080/admin/restart \
-            | python3 -m json.tool 2>/dev/null
+        print_info "OD-Container neu starten..."
+        docker restart open-design-claude >/dev/null 2>&1 \
+            && print_ok "open-design-claude neu gestartet" \
+            || print_err "Restart fehlgeschlagen"
         ;;
     62)
-        print_info "OD update (pull + up) triggern..."
-        $APP curl -s -X POST http://127.0.0.1:8080/admin/update \
-            | python3 -m json.tool 2>/dev/null
+        print_header "OD Update (Pull + Recreate)"
+        print_info "Laeuft ueber od-admin, damit der OAuth-Token erhalten bleibt..."
+        # Beide --env-file (Image/Origins + Token) wie im Dashboard.
+        docker exec od-admin sh -c '
+            cf=/host/open-design/docker-compose.claude-cli.server.yml
+            a="--file $cf --env-file /host/open-design/.env.claude-cli"
+            [ -f /var/www/html/var/data/od_oauth.env ] && a="$a --env-file /var/www/html/var/data/od_oauth.env"
+            docker compose $a pull open-design && docker compose $a up -d open-design
+        ' && print_ok "OD aktualisiert" || print_err "Update fehlgeschlagen (Details oben)"
         ;;
     63)
-        print_info "OD Logs (Strg+C)..."
-        $APP docker logs --follow --tail 100 open-design-claude
+        print_info "OD Logs (Strg+C zum Beenden)..."
+        docker logs --follow --tail 100 open-design-claude
         ;;
     64)
-        $APP curl -s http://127.0.0.1:8080/admin/claude/status 2>/dev/null \
-            | python3 -m json.tool 2>/dev/null
+        print_header "Claude CLI Status"
+        docker exec -u open-design open-design-claude claude --version 2>/dev/null \
+            || print_err "OD-Container laeuft nicht"
+        docker exec open-design-claude sh -c 'test -n "$CLAUDE_CODE_OAUTH_TOKEN" && echo "OAuth-Token: vorhanden" || echo "OAuth-Token: fehlt"' 2>/dev/null
         ;;
     65)
-        $APP curl -s -X POST http://127.0.0.1:8080/admin/claude/test 2>/dev/null \
-            | python3 -m json.tool 2>/dev/null
+        print_info "Claude Test-Prompt..."
+        docker exec -u open-design open-design-claude claude -p 'antworte nur mit OK' --output-format text 2>/dev/null \
+            || print_err "Test fehlgeschlagen (Token gesetzt?)"
         ;;
 
     # Server-Einrichtung (Erstinstallation)
