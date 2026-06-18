@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Security;
 
 use Endroid\QrCode\Builder\Builder;
-use Endroid\QrCode\Writer\PngWriter;
+use Endroid\QrCode\Writer\SvgWriter;
 use OTPHP\TOTP;
 
 /**
@@ -35,11 +35,11 @@ final class TwoFactorService
         return $totp->getProvisioningUri();
     }
 
-    /** QR als data:-URI (PNG, base64) zum direkten <img src>. */
+    /** QR als data:-URI (SVG, base64) — kein gd/imagick noetig. */
     public function qrDataUri(string $secret, string $username): string
     {
         $builder = new Builder(
-            writer: new PngWriter(),
+            writer: new SvgWriter(),
             data: $this->provisioningUri($secret, $username),
             size: 220,
             margin: 10,
