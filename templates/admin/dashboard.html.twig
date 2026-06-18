@@ -48,6 +48,41 @@
         <pre id="action-out" style="margin-top: 16px; display: none;"></pre>
     </div>
 
+    <div class="card reveal" style="animation-delay:.09s">
+        <div class="card-title">Open-Design-Updates</div>
+        {% if update_history is empty %}
+            <p class="muted" style="margin-top:0;">Noch kein Update erfasst — der erste Eintrag entsteht beim nächsten Image-Wechsel (Watchtower prüft alle 6 h automatisch).</p>
+        {% else %}
+            <div class="stat-grid" style="margin-bottom:18px;">
+                <div class="stat">
+                    <div class="k">Zuletzt aktualisiert</div>
+                    <div class="v">{{ update_history.0.at ? update_history.0.at|date('d.m.Y H:i') : '–' }}</div>
+                </div>
+                <div class="stat">
+                    <div class="k">Aktuelles Image</div>
+                    <div class="v mono" style="font-size:12px;">{{ update_history.0.digest|replace({'sha256:': ''})|slice(0, 12) }}</div>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table class="data">
+                    <thead><tr><th>Zeitpunkt</th><th>Image</th><th>Digest</th></tr></thead>
+                    <tbody>
+                    {% for e in update_history %}
+                        <tr>
+                            <td class="text-mono" style="white-space: nowrap;">{{ e.at ? e.at|date('d.m.Y H:i') : '–' }}</td>
+                            <td class="text-mono" style="font-size:12px;">{{ e.image|default('–') }}</td>
+                            <td class="text-mono" style="font-size:12px;">{{ e.digest|replace({'sha256:': ''})|slice(0, 12) }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="muted" style="font-size:12px; margin-top:12px;">
+                Auto-Update via Watchtower (alle 6 h) · sofort: „Update (Pull + Up)" oben.
+            </p>
+        {% endif %}
+    </div>
+
     <div class="card reveal" style="animation-delay:.12s">
         <div class="card-title">Claude CLI</div>
         <div id="claude-status" class="muted">Lade…</div>

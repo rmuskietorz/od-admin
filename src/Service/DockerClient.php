@@ -45,7 +45,7 @@ final class DockerClient
     /**
      * Health-Status des Containers. Fertiges Dashboard-Dict.
      *
-     * @return array{name:string,running:bool,health:string,image:string,started:string|null}
+     * @return array{name:string,running:bool,health:string,image:string,started:string|null,digest:string}
      */
     public function status(): array
     {
@@ -57,6 +57,7 @@ final class DockerClient
                 'health'  => 'not_found',
                 'image'   => '',
                 'started' => null,
+                'digest'  => '',
             ];
         }
 
@@ -76,6 +77,9 @@ final class DockerClient
             'health'  => $health,
             'image'   => is_string($config['Image'] ?? null) ? (string) $config['Image'] : '',
             'started' => isset($state['StartedAt']) && is_string($state['StartedAt']) ? $state['StartedAt'] : null,
+            // Image-ID (sha256) — aendert sich bei jedem echten Image-Update,
+            // nicht bei einem reinen Restart. Basis fuer den Update-Verlauf.
+            'digest'  => is_string($data['Image'] ?? null) ? (string) $data['Image'] : '',
         ];
     }
 

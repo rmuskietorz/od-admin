@@ -7,6 +7,7 @@ namespace App\Controller;
 use App\Entity\User;
 use App\Repository\LoginAttemptRepository;
 use App\Service\DockerClient;
+use App\Service\UpdateHistory;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
@@ -20,6 +21,7 @@ final class AdminController extends AbstractController
     public function __construct(
         private readonly DockerClient $docker,
         private readonly LoginAttemptRepository $loginAttempts,
+        private readonly UpdateHistory $updateHistory,
     ) {
     }
 
@@ -35,10 +37,14 @@ final class AdminController extends AbstractController
     public function dashboard(): Response
     {
         $user = $this->getUser();
+        $status = $this->docker->status();
+        // Update-Verlauf fortschreiben: nur bei echtem Image-Wechsel ein Eintrag.
+        $this->updateHistory->record($status['digest'], $status['image'], $status['started']);
 
         return $this->render('admin/dashboard.html.twig', [
-            'status'             => $this->docker->status(),
+            'status'             => $status,
             'two_factor_enabled' => $user instanceof User && $user->isTwoFactorEnabled(),
+            'update_history'     => $this->updateHistory->recent(6),
         ]);
     }
 
