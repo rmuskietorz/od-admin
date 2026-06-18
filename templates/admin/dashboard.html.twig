@@ -218,7 +218,29 @@
             v2.append(j.has_credentials ? badge('ok', 'vorhanden') : badge('err', 'fehlt'));
             c2.append(k2, v2);
 
-            grid.append(c1, c2);
+            const fmt = (d) => d.toLocaleDateString('de-DE', { year: 'numeric', month: '2-digit', day: '2-digit' });
+            if (j.has_credentials && j.token_set_at) {
+                const c3 = document.createElement('div'); c3.className = 'stat';
+                const k3 = document.createElement('div'); k3.className = 'k'; k3.textContent = 'Token gesetzt';
+                const v3 = document.createElement('div'); v3.className = 'v'; v3.textContent = fmt(new Date(j.token_set_at));
+                c3.append(k3, v3);
+
+                const c4 = document.createElement('div'); c4.className = 'stat';
+                const k4 = document.createElement('div'); k4.className = 'k'; k4.textContent = 'Läuft ab (≈)';
+                const v4 = document.createElement('div'); v4.className = 'v';
+                if (j.token_expires_at) {
+                    const expD = new Date(j.token_expires_at);
+                    const days = Math.round((expD - new Date()) / 86400000);
+                    v4.append(fmt(expD));
+                    if (days < 30) v4.append(' ', badge('err', days + ' Tage'));
+                    else if (days < 60) v4.append(' ', badge('warn', days + ' Tage'));
+                } else { v4.textContent = '–'; }
+                c4.append(k4, v4);
+
+                grid.append(c1, c2, c3, c4);
+            } else {
+                grid.append(c1, c2);
+            }
             cs.append(grid);
         }
         refreshClaudeStatus();

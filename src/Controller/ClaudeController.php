@@ -32,9 +32,14 @@ final class ClaudeController extends AbstractController
         $verProc = $this->docker->runInContainer(['claude', '--version'], timeoutSec: 5);
         $verProc->run();
 
+        $setAt = $this->docker->tokenSetAt();
+
         return new JsonResponse([
-            'has_credentials' => $this->docker->hasOauthToken(),
-            'cli_version'     => trim($verProc->getOutput()),
+            'has_credentials'  => $this->docker->hasOauthToken(),
+            'cli_version'      => trim($verProc->getOutput()),
+            // setup-token gilt ~1 Jahr; Ablauf ist eine Schaetzung ab mtime.
+            'token_set_at'     => $setAt?->format(\DateTimeInterface::ATOM),
+            'token_expires_at' => $setAt?->add(new \DateInterval('P1Y'))->format(\DateTimeInterface::ATOM),
         ]);
     }
 

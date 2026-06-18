@@ -277,6 +277,23 @@ final class DockerClient
     }
 
     /**
+     * Wann der OAuth-Token zuletzt gesetzt wurde (= mtime der Token-Datei).
+     * Basis fuer die Ablauf-Anzeige; null, wenn keine Token-Datei existiert.
+     */
+    public function tokenSetAt(): ?\DateTimeImmutable
+    {
+        if (!is_file(self::TOKEN_ENV)) {
+            return null;
+        }
+        $mtime = @filemtime(self::TOKEN_ENV);
+        if (false === $mtime) {
+            return null;
+        }
+
+        return (new \DateTimeImmutable())->setTimestamp($mtime);
+    }
+
+    /**
      * Token in .env.claude-cli upserten und OD-Container neu erzeugen, damit
      * CLAUDE_CODE_OAUTH_TOKEN in dessen Env landet. $token ist auf
      * sk-ant-oat01-[A-Za-z0-9_-]+ validiert -> keine Shell-Sonderzeichen.
