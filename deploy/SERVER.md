@@ -1,188 +1,118 @@
 # od-admin Server-Setup
 
-End-to-End-Anleitung: frischer Ubuntu/Debian-Server → laufendes Setup mit od-admin + Open Design + TLS + fail2ban + Backups.
+End-to-End: frischer Ubuntu/Debian-Server → Open Design + Admin-Dashboard auf
+zwei Subdomains, TLS, Single-Sign-On, fail2ban, Backups. Fast alles läuft über
+`bash helper.sh` (geführtes Menü).
+
+## Architektur (Ist-Stand)
+
+- **`open-design.robmus.de`** → Open Design (hinter Auth-Gate)
+- **`admin.open-design.robmus.de`** → Admin-Dashboard (Wurzel)
+- Beide laufen durch **od-admin** (nginx trennt nach Host); od-admin proxyt OD
+  und hält das Login-Gate (`auth_request`).
+- **Ein Login (SSO):** Cookie `OD_SESSION` mit Domain `open-design.robmus.de`
+  → deckt nur OD + Admin-Subdomain, kein Leak an andere robmus.de-Seiten.
+- **Claude-Auth:** Subscription-OAuth-Token `CLAUDE_CODE_OAUTH_TOKEN`
+  (aus `claude setup-token`, **kein** `ANTHROPIC_API_KEY`). Wird vom Button-Login
+  im Dashboard erzeugt und in den OD-Container injiziert.
 
 ## 1. Server-Vorbereitung
 
 ```bash
-# Docker
 curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER && newgrp docker
-
-# nginx + certbot + fail2ban + utilities
 sudo apt update
-sudo apt install -y nginx certbot python3-certbot-nginx fail2ban git rsync openssl
+sudo apt install -y nginx certbot python3-certbot-nginx fail2ban git rsync openssl util-linux
 ```
 
-## 2. Open Design installieren
+## 2. DNS
+
+Zwei A-Records auf die Server-IP:
+- `open-design.robmus.de` → <SERVER-IP>
+- `admin.open-design.robmus.de` → <SERVER-IP>  (Subdomain von open-design, nötig fürs SSO-Cookie)
+
+## 3. Repos klonen
 
 ```bash
-sudo mkdir -p /opt && sudo chown $USER /opt
-cd /opt
-git clone --depth 1 --filter=blob:none --sparse \
-    -b claude-cli-deploy git@github.com:rmuskietorz/open-design.git
-cd open-design
-git sparse-checkout set deploy
-
-cp deploy/.env.claude-cli.example deploy/.env.claude-cli
-# In .env.claude-cli setzen:
-#   OPEN_DESIGN_IMAGE=ghcr.io/rmuskietorz/open-design-claude:latest
-#   OPEN_DESIGN_ALLOWED_ORIGINS=https://admin.example.com
-#   OPEN_DESIGN_BIND=127.0.0.1
-nano deploy/.env.claude-cli
-
-# GHCR login (falls Image privat)
-echo $GHCR_PAT | docker login ghcr.io -u rmuskietorz --password-stdin
-
-# Server-Mode starten (Watchtower mit dabei)
-cd deploy/scripts
-export OD_COMPOSE_FILE=$(pwd)/../docker-compose.claude-cli.server.yml
-./od-claude.sh 17 1     # Pull + Up
-```
-
-## 3. od-admin installieren
-
-```bash
-cd /opt
+sudo mkdir -p /var/www/tools && cd /var/www/tools
+git clone -b claude-cli-deploy git@github.com:rmuskietorz/open-design.git
 git clone git@github.com:rmuskietorz/od-admin.git
 cd od-admin
-
-# Secrets generieren
-APP_SECRET=$(openssl rand -hex 32)
-TTYD_TOKEN=$(openssl rand -hex 16)
-
-cp .env.local.example .env.local
-sed -i "s/replace-with-output-of-openssl-rand-hex-32/${APP_SECRET}/" .env.local
-sed -i "s/replace-with-output-of-openssl-rand-hex-16/${TTYD_TOKEN}/" .env.local
-# TRUSTED_HOSTS anpassen: ^(admin\.example\.com)$
-
-# Bauen + Starten
-docker compose build
-docker compose up -d
-
-# Migration laeuft automatisch via entrypoint.sh
-
-# Erster User
-docker compose exec od-admin php bin/console app:create-user robin
-# Passwort >= 12 Zeichen, zweimal eingeben
 ```
 
-## 4. TLS + nginx Reverse Proxy
+## 4. Geführte Einrichtung
 
 ```bash
-# Filter-Templates kopieren
-sudo cp deploy/nginx/od-admin.example.conf /etc/nginx/sites-available/od-admin
-sudo sed -i 's/admin\.example\.com/<deine-domain>/g' /etc/nginx/sites-available/od-admin
-sudo ln -s /etc/nginx/sites-available/od-admin /etc/nginx/sites-enabled/
-
-# nginx vor TLS-Konfig testen
-sudo nginx -t
-sudo systemctl reload nginx
-
-# Let's Encrypt Zertifikat
-sudo certbot --nginx -d <deine-domain>
-
-# Auto-Renewal Cron ist von certbot schon eingerichtet (`systemctl status certbot.timer`)
+bash helper.sh        # Menü; oder direkt einzelne Schritte:
 ```
+- **8** Komplett-Einrichtung (Preflight → GHCR-Login → OD-Server → od-admin
+  .env.local [Domains, SSO-Cookie, TRUSTED_HOSTS, freier Port] → od-admin starten
+  → Admin-User → Abschluss). Defaults: `open-design.robmus.de` /
+  `admin.open-design.robmus.de`.
+- **92** nginx-vHosts für beide Subdomains
+- **93** EIN Let's-Encrypt-Cert für beide (`certbot -d open-design… -d admin.open-design…`)
 
-## 5. fail2ban
+GHCR-PAT (classic, `read:packages`) für den Login-Schritt bereithalten, falls
+das Image privat ist.
+
+## 5. Claude-Login
+
+Dashboard `https://admin.open-design.robmus.de/` → einloggen → **Claude Login** →
+**Login starten** → URL autorisieren → Code einfügen → Bestätigen. Der Token wird
+gespeichert (`var/data/od_oauth.env`) und der OD-Container neu erzeugt.
+
+## 6. fail2ban
 
 ```bash
-sudo cp deploy/fail2ban/od-admin.filter.conf /etc/fail2ban/filter.d/od-admin.conf
-sudo cp deploy/fail2ban/od-admin.jail.conf   /etc/fail2ban/jail.d/od-admin.conf
-
-# Logfile-Pfad muss mit dem in nginx-vHost gesetzten Pfad uebereinstimmen
-ls -la /var/log/nginx/od-admin.access.log
-
-# Filter testen
-sudo fail2ban-regex /var/log/nginx/od-admin.access.log \
-    /etc/fail2ban/filter.d/od-admin.conf
-
-# Aktivieren
-sudo systemctl restart fail2ban
-sudo fail2ban-client status od-admin
+bash helper.sh 54     # installiert (falls nötig), kopiert Filter+Jail, restart, Status
+bash helper.sh 53     # Status spaeter
 ```
+Jail liest `/var/log/nginx/od-admin.access.log`, bannt nach 5 Login-POSTs/10 min.
 
-## 6. Firewall
+## 7. Firewall
 
 ```bash
-sudo ufw allow 22/tcp
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw enable
-
-# Port 8080 und 7456 sind nur an 127.0.0.1 gebunden, nicht oeffentlich
-sudo ss -tlnp | grep -E ':(7456|8080)'
+sudo ufw allow 22/tcp && sudo ufw allow 80/tcp && sudo ufw allow 443/tcp && sudo ufw enable
+sudo ss -tlnp | grep -E ':(7456|8086|8088)'   # OD + od-admin nur an 127.0.0.1
 ```
 
-## 7. Backups
+## 8. Backups & Restore
 
 ```bash
-# Manueller Run
-sudo ./deploy/scripts/backup.sh
-
-# Cron fuer taegliches Backup um 03:30
-sudo tee /etc/cron.d/od-admin-backup <<EOF
-30 3 * * * root /opt/od-admin/deploy/scripts/backup.sh >> /var/log/od-admin-backup.log 2>&1
-EOF
+bash helper.sh 7      # jetzt sichern (Volume-Auswahl: alle / einzeln)
+bash helper.sh 73     # taeglicher Cron 03:30
+bash helper.sh 71     # Backup-Liste
+bash helper.sh 74     # Restore (Snapshot + Volumes waehlen, 'JA' bestaetigen)
 ```
-
-Backup-Inhalt:
-- `od_admin_data.tar.gz`     User-DB (SQLite)
-- `open_design_data.tar.gz`  Projekte, Artefakte, OD-DB
-- `claude_home.tar.gz`       OAuth-Credentials
-- `od-admin-config.tar.gz`   Compose + .env (Snapshot)
-- `open-design-config.tar.gz` OD-Compose + .env
-
-Retention: 30 Tage, danach automatisch geloescht.
-
-## 8. Restore-Pfad (Disaster Recovery)
-
-```bash
-TARGET=/var/backups/od-admin/<timestamp>
-
-# Container stoppen
-cd /opt/od-admin && docker compose down
-cd /opt/open-design/deploy/scripts && ./od-claude.sh 11
-
-# Volumes neu anlegen + Daten reinpacken
-for vol in od_admin_data open_design_data claude_home; do
-    docker volume create "$vol"
-    docker run --rm -v "$vol:/data" -v "$TARGET:/backup:ro" \
-        alpine sh -c "cd /data && tar -xzf /backup/${vol}.tar.gz"
-done
-
-# Container starten
-cd /opt/od-admin && docker compose up -d
-cd /opt/open-design/deploy/scripts && ./od-claude.sh 1
-```
+Sichert die Volumes `od_admin_data` (User-DB/Audit/Token), `open_design_data`
+(Designs/Projekte/Artefakte), `claude_home` + Compose/.env-Snapshots nach
+`/var/backups/od-admin/<ts>/`. Retention 30 Tage. Designs überleben Rebuilds
+(Named Volume) — Restore nur bei `down -v`/`volume rm` nötig.
 
 ## 9. Updates
 
 | Was | Wann | Wie |
 |---|---|---|
-| Open Design | automatisch alle 6h | Watchtower zieht GHCR-Image |
-| Claude CLI | mit OD-Update | im Image gebundelt |
-| od-admin | manuell | `cd /opt/od-admin && git pull && docker compose build && docker compose up -d` |
-| nginx / fail2ban / system | wöchentlich | `apt update && apt upgrade` |
+| Open Design (Image) | automatisch alle 6 h | Watchtower zieht GHCR `:latest` |
+| Open Design (sofort) | manuell | Dashboard „Update (Pull + Up)" **oder** `bash helper.sh 62` |
+| od-admin selbst | manuell | `cd /var/www/tools/od-admin && git pull && docker compose up -d --build` |
+| Upstream-Features (OD) | bewusst | lokal `git merge upstream/main` auf claude-cli-deploy, Dockerfile an Drift anpassen, pushen → CI baut |
+| System | wöchentlich | `apt update && apt upgrade` |
 
-## 10. Monitoring (optional)
+OD-Update behält den Token (läuft über od-admin mit beiden `--env-file`). od-admin
+selbst NICHT direkt vom Host neu `up`-en, wenn Token-relevant — der Token liegt in
+od-admins Volume.
 
-Healthchecks sind in Compose bereits eingebaut. Externes Monitoring (UptimeRobot, Hetzner-Status):
+## 10. Sicherheits-Checkliste
 
-- `https://<domain>/admin/login` → 200 (od-admin Healthcheck-Ziel)
-- `https://<domain>/api/health` → 200 (OD Daemon Healthcheck, geht durch od-admin reverse-proxy nur wenn eingeloggt – fuer Public-Healthcheck eigenen Path bauen oder nicht oeffentlich monitoren)
-
-## 11. Sicherheits-Checkliste
-
-- [ ] `OPEN_DESIGN_BIND=127.0.0.1` (kein direkter Public-Access auf OD)
-- [ ] `OD_ADMIN_BIND=127.0.0.1`
-- [ ] TLS aktiv, HSTS gesetzt
-- [ ] `TRUSTED_HOSTS` in od-admin `.env.local` exakt auf die Domain
-- [ ] Erster User hat starkes Passwort (>= 12 Zeichen)
-- [ ] fail2ban aktiv (`fail2ban-client status od-admin`)
-- [ ] UFW aktiv, nur 22/80/443 offen
-- [ ] SSH: PubKey-Only, kein root-Login (`PermitRootLogin no`, `PasswordAuthentication no`)
-- [ ] Backups laufen taeglich, Restore-Pfad einmal manuell getestet
-- [ ] `.env.local` nicht im Git
-- [ ] ANTHROPIC_API_KEY NICHT in der Env (sonst Subscription umgangen)
+- [ ] `OPEN_DESIGN_BIND=127.0.0.1`, `OD_ADMIN_BIND=127.0.0.1` (kein Public-Direktzugriff)
+- [ ] TLS aktiv (beide Subdomains, ein Cert), HSTS gesetzt
+- [ ] `TRUSTED_HOSTS` = beide Domains (+ localhost), `COOKIE_DOMAIN=open-design.robmus.de`
+- [ ] Admin-User starkes Passwort (≥ 12 Zeichen, bcrypt cost 13)
+- [ ] fail2ban aktiv (`bash helper.sh 53`)
+- [ ] UFW aktiv, nur 22/80/443
+- [ ] SSH: PubKey-only, kein root-Login
+- [ ] Backups täglich (Cron), Restore einmal getestet
+- [ ] `.env.local` / `od_oauth.env` nicht im Git
+- [ ] **`ANTHROPIC_API_KEY` NICHT gesetzt** (sonst API-Billing statt Abo)
+- [ ] (empfohlen) docker-socket-proxy statt direktem RW-Socket-Mount; 2FA fürs Login
+```
