@@ -49,10 +49,19 @@ final class AdminController extends AbstractController
         // Update-Verlauf fortschreiben: nur bei echtem Image-Wechsel ein Eintrag.
         $this->updateHistory->record($status['digest'], $status['image'], $status['started']);
 
+        // Token-Ablauf fuers Top-Banner (mtime der Token-Datei +1 Jahr).
+        $tokenSetAt = $this->docker->tokenSetAt();
+        $tokenExpiresAt = $tokenSetAt?->add(new \DateInterval('P1Y'));
+        $tokenDaysLeft = null !== $tokenExpiresAt
+            ? (int) (new \DateTimeImmutable())->diff($tokenExpiresAt)->format('%r%a')
+            : null;
+
         return $this->render('admin/dashboard.html.twig', [
             'status'             => $status,
             'two_factor_enabled' => $user instanceof User && $user->isTwoFactorEnabled(),
             'update_history'     => $this->updateHistory->recent(6),
+            'token_expires_at'   => $tokenExpiresAt,
+            'token_days_left'    => $tokenDaysLeft,
         ]);
     }
 

@@ -243,6 +243,18 @@
                  border: 1px solid var(--border-strong); }
         .flash-info { color: var(--teal); background: rgba(29,177,163,.10); border-color: rgba(29,177,163,.3); }
         .flash-error { color: var(--err); background: rgba(255,107,107,.10); border-color: rgba(255,107,107,.3); }
+        .flash-warn { color: #e0b341; background: rgba(224,179,65,.10); border-color: rgba(224,179,65,.35); }
+        .flash a { color: inherit; text-decoration: underline; }
+        .modal-overlay { position: fixed; inset: 0; z-index: 1000; display: none;
+            align-items: center; justify-content: center; padding: 24px;
+            background: rgba(5,10,15,.72); backdrop-filter: blur(4px); }
+        .modal-overlay.open { display: flex; }
+        .modal-panel { width: min(960px, 95vw); max-height: 85vh; display: flex; flex-direction: column;
+            background: var(--surface, #0f1a22); border: 1px solid var(--border-strong, var(--border));
+            border-radius: 14px; box-shadow: 0 24px 70px rgba(0,0,0,.6); overflow: hidden; }
+        .modal-head { display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 20px; border-bottom: 1px solid var(--border); }
+        .modal-panel pre { margin: 0; flex: 1; overflow: auto; padding: 16px 20px; }
 
         /* ── Steps (stepper) ────────────────────────────────────────── */
         .steps { list-style: none; counter-reset: s; margin: 0; padding: 0; display: grid; gap: 14px; }

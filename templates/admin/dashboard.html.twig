@@ -3,6 +3,20 @@
 {% block title %}Dashboard · od-admin{% endblock %}
 
 {% block body %}
+    {% if token_days_left is not null and token_days_left < 0 %}
+        <div class="flash flash-error" role="alert">
+            ⚠ <strong>Claude-OAuth-Token abgelaufen</strong> (seit {{ token_expires_at|date('d.m.Y') }}).
+            Open Design funktioniert nicht mehr — bitte neu einloggen:
+            <a href="{{ path('app_claude_login') }}">Claude Login → Login starten</a>.
+        </div>
+    {% elseif token_days_left is not null and token_days_left < 30 %}
+        <div class="flash flash-warn" role="alert">
+            Claude-OAuth-Token läuft in <strong>{{ token_days_left }} Tagen</strong> ab
+            ({{ token_expires_at|date('d.m.Y') }}). Beizeiten neu einloggen:
+            <a href="{{ path('app_claude_login') }}">Claude Login</a>.
+        </div>
+    {% endif %}
+
     <div class="page-head reveal">
         <div class="eyebrow">Open Design · Laufzeit</div>
         <h1>Dashboard</h1>
@@ -122,11 +136,13 @@
         {% endif %}
     </div>
 
-    <div class="card reveal" id="logs-card" style="display: none;">
-        <div class="card-title">Logs · live</div>
-        <pre id="logs-pre"></pre>
-        <div class="btn-row" style="margin-top: 14px;">
-            <button id="btn-logs-close" class="ghost">Schließen</button>
+    <div class="modal-overlay" id="logs-modal" role="dialog" aria-modal="true" aria-label="Live-Logs">
+        <div class="modal-panel">
+            <div class="modal-head">
+                <span class="card-title" style="margin: 0;">Logs · live</span>
+                <button id="btn-logs-close" class="ghost" style="padding: 4px 12px;">✕ Schließen</button>
+            </div>
+            <pre id="logs-pre"></pre>
         </div>
     </div>
 
@@ -257,23 +273,30 @@
             refreshClaudeStatus();
         };
 
-        // ── Logs SSE ────────────────────────────────────────────────────────
+        // ── Logs SSE (Modal/Popover) ─────────────────────────────────────────
         let logSource = null;
+        const logsModal = document.getElementById('logs-modal');
+        const logsPre = document.getElementById('logs-pre');
+
+        const closeLogs = () => {
+            if (logSource) { logSource.close(); logSource = null; }
+            logsModal.classList.remove('open');
+        };
+
         document.getElementById('btn-logs').onclick = () => {
-            const card = document.getElementById('logs-card');
-            const pre = document.getElementById('logs-pre');
-            card.style.display = '';
-            pre.textContent = '';
+            logsPre.textContent = '';
+            logsModal.classList.add('open');
             logSource = new EventSource('{{ path('app_logs') }}');
             logSource.onmessage = (e) => {
-                pre.append(e.data + '\n');
-                pre.scrollTop = pre.scrollHeight;
+                logsPre.append(e.data + '\n');
+                logsPre.scrollTop = logsPre.scrollHeight;
             };
+            logSource.onerror = () => { logsPre.append('\n[Verbindung beendet]\n'); };
         };
-        document.getElementById('btn-logs-close').onclick = () => {
-            if (logSource) { logSource.close(); logSource = null; }
-            document.getElementById('logs-card').style.display = 'none';
-        };
+        document.getElementById('btn-logs-close').onclick = closeLogs;
+        // Klick auf den Hintergrund (nicht aufs Panel) schliesst.
+        logsModal.addEventListener('click', (e) => { if (e.target === logsModal) closeLogs(); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && logsModal.classList.contains('open')) closeLogs(); });
     </script>
     {% endblock %}
 {% endblock %}
