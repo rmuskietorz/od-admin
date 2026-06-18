@@ -316,7 +316,7 @@ setup_finish() {
         print_err "OD-Server : /api/health nicht erreichbar"
     fi
     local p; p=$(grep -E '^OD_ADMIN_PORT=' "$SCRIPT_DIR/.env" 2>/dev/null | cut -d= -f2); p="${p:-8086}"
-    if curl -sf "http://127.0.0.1:${p}/healthz" >/dev/null 2>&1; then
+    if [ "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${p}/healthz" 2>/dev/null)" = "200" ]; then
         print_ok "od-admin  : /healthz ok (Port $p)"
     else
         print_err "od-admin  : /healthz nicht erreichbar (Port $p)"
@@ -369,10 +369,10 @@ setup_nginx_vhost() {
     local port; port=$(grep -E '^OD_ADMIN_PORT=' "$SCRIPT_DIR/.env" 2>/dev/null | cut -d= -f2); port="${port:-8086}"
 
     # Erreichbarkeit des Containers (Health-Endpoint, keine Auth).
-    if curl -sf "http://127.0.0.1:${port}/healthz" >/dev/null 2>&1; then
-        print_ok "od-admin erreichbar auf 127.0.0.1:${port}"
+    if [ "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}/healthz" 2>/dev/null)" = "200" ]; then
+        print_ok "od-admin erreichbar auf 127.0.0.1:${port} (neues Image)"
     else
-        print_err "od-admin NICHT erreichbar auf 127.0.0.1:${port} — erst Container starten (Punkt 87)."
+        print_err "od-admin liefert kein 200 auf /healthz (Port ${port}) — laeuft noch das ALTE Image? Erst 'docker compose up -d --build'."
         confirm "Trotzdem fortfahren?" || return 1
     fi
 
