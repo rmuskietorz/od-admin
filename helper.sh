@@ -62,6 +62,12 @@ OD_DIR="${OD_DIR:-$(dirname "$SCRIPT_DIR")/open-design}"
 OD_DOMAIN="${OD_DOMAIN:-open-design.robmus.de}"
 ADMIN_DOMAIN="${ADMIN_DOMAIN:-admin.open-design.robmus.de}"
 [ -f "$STATE_FILE" ] && . "$STATE_FILE"
+# Subdomain-Schema erzwingen: Admin ist eine Subdomain von OD. Alten/stalen
+# State (Admin leer oder == OD aus dem frueheren Single-Domain-Schema) auf
+# admin.<OD> korrigieren, damit helper 86/92/93 die richtigen Defaults zeigen.
+if [ -z "$ADMIN_DOMAIN" ] || [ "$ADMIN_DOMAIN" = "$OD_DOMAIN" ]; then
+    ADMIN_DOMAIN="admin.$OD_DOMAIN"
+fi
 
 _save_state() {
     cat > "$STATE_FILE" <<EOF
