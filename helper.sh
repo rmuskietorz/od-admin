@@ -495,6 +495,7 @@ _MITEMS=(
   "52:Audit purgen (90 Tage)"
   "53:fail2ban Status (Host)"
   "54:fail2ban aktivieren (Configs + restart)"
+  "55:2FA zuruecksetzen (Notfall)"
   "G:Open Design Steuerung"
   "6:OD-Status"
   "61:OD restart"
@@ -1011,6 +1012,13 @@ case $option in
         else
             print_err "fail2ban-Restart fehlgeschlagen – 'journalctl -u fail2ban' pruefen."
         fi
+        ;;
+    55)
+        print_header "2FA zuruecksetzen (Notfall)"
+        echo -e "  ${YELLOW}Deaktiviert 2FA fuer einen User (Authenticator + Recovery-Codes weg).${RESET}"
+        _u=$(ask "Username")
+        [ -z "$_u" ] && { print_err "Kein Username."; continue; }
+        $APP_TTY php bin/console app:2fa-reset "$_u"
         ;;
 
     # OD-Steuerung (direkte docker-Befehle auf dem Host — kein Web-Auth noetig)

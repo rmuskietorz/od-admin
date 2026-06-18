@@ -1,0 +1,48 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Bestätigung · od-admin{% endblock %}
+
+{% block topbar %}{% endblock %}
+
+{% block stylesheets %}
+<style>
+    .auth-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px 0; }
+    .auth-card { width: 100%; max-width: 380px; }
+    .auth-head { text-align: center; margin-bottom: 24px; }
+    .auth-head .tag { font-family: var(--font-mono); font-size: 11px; letter-spacing: .2em;
+                      text-transform: uppercase; color: var(--teal); }
+    .auth-head h1 { margin: 8px 0 0; font-size: 24px; }
+    .code-input { text-align: center; letter-spacing: .4em; font-size: 22px; font-family: var(--font-mono); }
+</style>
+{% endblock %}
+
+{% block body %}
+    <div class="auth-shell">
+        <div class="auth-card reveal">
+            <div class="auth-head">
+                <div class="tag">Zwei-Faktor-Authentifizierung</div>
+                <h1>Code bestätigen</h1>
+            </div>
+            <div class="card" style="margin-bottom: 14px;">
+                {% if error %}<div class="error">⚠ {{ error }}</div>{% endif %}
+                <form method="post" action="{{ path('app_2fa') }}">
+                    <div class="form-group">
+                        <label for="code">6-stelliger Code aus deiner Authenticator-App</label>
+                        <input type="text" id="code" name="code" class="form-input code-input"
+                               inputmode="numeric" autocomplete="one-time-code" autofocus
+                               placeholder="000000">
+                    </div>
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token('2fa') }}">
+                    <button type="submit" style="width: 100%;">Bestätigen →</button>
+                </form>
+                <p class="muted" style="font-size: 12px; margin: 14px 0 0;">
+                    Kein Zugriff auf die App? Stattdessen einen deiner
+                    <strong>Recovery-Codes</strong> oben eingeben (wird verbraucht).
+                </p>
+            </div>
+            <div style="text-align: center;">
+                <a href="{{ path('app_logout') }}" class="muted" style="font-size: 13px;">Abbrechen / Logout</a>
+            </div>
+        </div>
+    </div>
+{% endblock %}

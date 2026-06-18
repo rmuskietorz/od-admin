@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Entity\User;
 use App\Repository\LoginAttemptRepository;
 use App\Service\DockerClient;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -33,8 +34,11 @@ final class AdminController extends AbstractController
     #[Route(path: '/', name: 'app_dashboard', methods: ['GET'])]
     public function dashboard(): Response
     {
+        $user = $this->getUser();
+
         return $this->render('admin/dashboard.html.twig', [
-            'status' => $this->docker->status(),
+            'status'             => $this->docker->status(),
+            'two_factor_enabled' => $user instanceof User && $user->isTwoFactorEnabled(),
         ]);
     }
 

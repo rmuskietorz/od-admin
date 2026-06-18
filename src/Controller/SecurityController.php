@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Entity\User;
+use App\Security\TwoFactorListener;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
@@ -44,10 +47,20 @@ final class SecurityController extends AbstractController
      * des Inhalts.
      */
     #[Route(path: '/_auth_check', name: 'app_auth_check', methods: ['GET'])]
-    public function authCheck(): Response
+    public function authCheck(Request $request): Response
     {
-        return $this->isGranted('IS_AUTHENTICATED_REMEMBERED')
-            ? new Response('', Response::HTTP_OK)
-            : new Response('', Response::HTTP_UNAUTHORIZED);
+        if (!$this->isGranted('IS_AUTHENTICATED_REMEMBERED')) {
+            return new Response('', Response::HTTP_UNAUTHORIZED);
+        }
+
+        // Mit aktivem 2FA bleibt das Gate zu, bis der 2FA-Schritt erledigt ist
+        // — sonst waere Open Design schon nach dem Passwort erreichbar.
+        $user = $this->getUser();
+        if ($user instanceof User && $user->isTwoFactorEnabled()
+            && true !== $request->getSession()->get(TwoFactorListener::SESSION_KEY)) {
+            return new Response('', Response::HTTP_UNAUTHORIZED);
+        }
+
+        return new Response('', Response::HTTP_OK);
     }
 }

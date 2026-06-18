@@ -1,0 +1,31 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Recovery-Codes · od-admin{% endblock %}
+
+{% block body %}
+    <div class="page-head reveal">
+        <div class="eyebrow">Sicherheit · Zwei-Faktor</div>
+        <h1>2FA aktiv ✓</h1>
+        <p class="sub">Speichere diese Recovery-Codes <strong>jetzt</strong> sicher (Passwort-Manager).
+            Sie werden <strong>nur einmal</strong> angezeigt und ersetzen je einmalig den App-Code,
+            falls du keinen Zugriff auf die Authenticator-App hast.</p>
+    </div>
+
+    <div class="card reveal" style="animation-delay:.06s">
+        <div class="card-title">Recovery-Codes</div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px;">
+            {% for c in codes %}
+                <code class="text-mono" style="background:rgba(0,0,0,.3); border:1px solid var(--border);
+                       border-radius:8px; padding:10px 12px; text-align:center; font-size:14px;">{{ c }}</code>
+            {% endfor %}
+        </div>
+        <p class="muted" style="font-size:12px; margin-top:14px;">
+            Jeder Code ist nur einmal gültig. Bei Verlust beider Faktoren:
+            Reset per SSH (<code>helper.sh</code> → „2FA zurücksetzen").
+        </p>
+    </div>
+
+    <div class="btn-row">
+        <a href="{{ path('app_dashboard') }}" class="btn">Gespeichert — weiter zum Dashboard</a>
+    </div>
+{% endblock %}

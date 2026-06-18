@@ -239,6 +239,10 @@
         .muted { color: var(--fg-dim); }
         .text-mono { font-family: var(--font-mono); }
         .empty-state { text-align: center; padding: 48px 20px; color: var(--fg-mute); }
+        .flash { border-radius: var(--radius-sm); padding: 12px 16px; margin-bottom: 16px; font-size: 14px;
+                 border: 1px solid var(--border-strong); }
+        .flash-info { color: var(--teal); background: rgba(29,177,163,.10); border-color: rgba(29,177,163,.3); }
+        .flash-error { color: var(--err); background: rgba(255,107,107,.10); border-color: rgba(255,107,107,.3); }
 
         /* ── Steps (stepper) ────────────────────────────────────────── */
         .steps { list-style: none; counter-reset: s; margin: 0; padding: 0; display: grid; gap: 14px; }
@@ -259,6 +263,7 @@
     {% block stylesheets %}{% endblock %}
 </head>
 <body>
+{% block topbar %}
 {% if app.user %}
     <header class="top">
         <div class="brand">
@@ -284,7 +289,13 @@
         </div>
     </header>
 {% endif %}
+{% endblock %}
 <main class="container">
+    {% for type, messages in app.flashes %}
+        {% for message in messages %}
+            <div class="flash flash-{{ type }}">{{ message }}</div>
+        {% endfor %}
+    {% endfor %}
     {% block body %}{% endblock %}
 </main>
 {% block javascripts %}{% endblock %}

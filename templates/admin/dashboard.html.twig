@@ -59,6 +59,34 @@
         <pre id="claude-out" style="margin-top: 16px; display: none;"></pre>
     </div>
 
+    <div class="card reveal" style="animation-delay:.15s">
+        <div class="card-title">Sicherheit · 2FA</div>
+        {% if two_factor_enabled %}
+            <div class="stat-grid" style="margin-bottom: 16px;">
+                <div class="stat">
+                    <div class="k">Zwei-Faktor</div>
+                    <div class="v"><span class="badge ok">aktiv</span></div>
+                </div>
+            </div>
+            <form method="post" action="{{ path('app_2fa_disable') }}" class="btn-row"
+                  onsubmit="return confirm('2FA wirklich deaktivieren?');">
+                <input type="text" name="code" class="form-input" inputmode="numeric"
+                       placeholder="Aktueller 6-stelliger Code" style="max-width: 240px;">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token('2fa_disable') }}">
+                <button type="submit" class="danger">2FA deaktivieren</button>
+            </form>
+        {% else %}
+            <p class="muted" style="margin-top: 0;">
+                Zweiter Faktor (TOTP) fürs Login — empfohlen, da hinter dem Login die
+                Server-Steuerung liegt.
+            </p>
+            <div class="btn-row">
+                <a href="{{ path('app_2fa_setup') }}" class="btn">2FA aktivieren</a>
+                <span class="badge err">inaktiv</span>
+            </div>
+        {% endif %}
+    </div>
+
     <div class="card reveal" id="logs-card" style="display: none;">
         <div class="card-title">Logs · live</div>
         <pre id="logs-pre"></pre>

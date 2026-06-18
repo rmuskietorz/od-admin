@@ -29,6 +29,14 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column]
     private \DateTimeImmutable $createdAt;
 
+    /** Base32-TOTP-Secret; null = 2FA aus. */
+    #[ORM\Column(type: 'string', length: 255, nullable: true)]
+    private ?string $totpSecret = null;
+
+    /** @var list<string> Recovery-Codes, jeweils sha256-gehasht. */
+    #[ORM\Column(type: 'json', nullable: true)]
+    private ?array $recoveryCodes = null;
+
     public function __construct(string $username, string $password)
     {
         $this->username = $username;
@@ -83,6 +91,33 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function getCreatedAt(): \DateTimeImmutable
     {
         return $this->createdAt;
+    }
+
+    public function isTwoFactorEnabled(): bool
+    {
+        return null !== $this->totpSecret && '' !== $this->totpSecret;
+    }
+
+    public function getTotpSecret(): ?string
+    {
+        return $this->totpSecret;
+    }
+
+    public function setTotpSecret(?string $secret): void
+    {
+        $this->totpSecret = $secret;
+    }
+
+    /** @return list<string> */
+    public function getRecoveryCodes(): array
+    {
+        return $this->recoveryCodes ?? [];
+    }
+
+    /** @param list<string> $codes sha256-Hashes */
+    public function setRecoveryCodes(array $codes): void
+    {
+        $this->recoveryCodes = array_values($codes);
     }
 
     public function eraseCredentials(): void

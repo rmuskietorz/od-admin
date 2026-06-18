@@ -1,0 +1,44 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}2FA einrichten · od-admin{% endblock %}
+
+{% block body %}
+    <div class="page-head reveal">
+        <div class="eyebrow">Sicherheit · Zwei-Faktor</div>
+        <h1>2FA einrichten</h1>
+        <p class="sub">Authenticator-App (z. B. Aegis, Google Authenticator, 1Password) verbinden.</p>
+    </div>
+
+    <div class="card reveal" style="animation-delay:.06s">
+        <div class="card-title">QR scannen</div>
+        {% if error %}<div class="error">⚠ {{ error }}</div>{% endif %}
+        <div style="display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start;">
+            <img src="{{ qr }}" alt="2FA QR-Code" width="200" height="200"
+                 style="border-radius:12px; background:#fff; padding:8px;">
+            <div style="flex:1; min-width:240px;">
+                <ol class="steps" style="margin-bottom:16px;">
+                    <li>QR mit der Authenticator-App scannen (oder Secret manuell eintragen).</li>
+                    <li>Den angezeigten 6-stelligen Code unten eingeben → bestätigen.</li>
+                </ol>
+                <label>Secret (manuell)</label>
+                <code class="text-mono" style="display:block; word-break:break-all; background:rgba(0,0,0,.3);
+                       border:1px solid var(--border); border-radius:8px; padding:10px; font-size:12px;">{{ secret }}</code>
+
+                <form method="post" action="{{ path('app_2fa_setup') }}" style="margin-top:16px;">
+                    <div class="form-group">
+                        <label for="code">Code aus der App</label>
+                        <input type="text" id="code" name="code" class="form-input" inputmode="numeric"
+                               autocomplete="off" autofocus placeholder="000000"
+                               style="letter-spacing:.3em; font-family:var(--font-mono);">
+                    </div>
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token('2fa_setup') }}">
+                    <button type="submit">Aktivieren</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="btn-row">
+        <a href="{{ path('app_dashboard') }}" class="btn ghost">← Abbrechen</a>
+    </div>
+{% endblock %}
