@@ -14,7 +14,7 @@ final class SecurityControllerTest extends WebTestCase
     public function testLoginPageRendersForAnonymous(): void
     {
         $client = static::createClient();
-        $client->request('GET', '/admin/login');
+        $client->request('GET', '/login');
 
         self::assertResponseIsSuccessful();
         self::assertSelectorTextContains('button[type=submit]', 'Anmelden');
@@ -54,12 +54,12 @@ final class SecurityControllerTest extends WebTestCase
         $client = static::createClient();
         $this->createTestUser($client->getContainer(), 'robin', 'correct-horse-battery-staple');
 
-        $client->request('GET', '/admin/login');
+        $client->request('GET', '/login');
         $client->submitForm('Anmelden', [
             '_username' => 'robin',
             '_password' => 'correct-horse-battery-staple',
         ]);
-        self::assertResponseRedirects('/admin');
+        self::assertResponseRedirects('/');
 
         $client->request('GET', '/_auth_check');
         self::assertResponseIsSuccessful();
@@ -70,13 +70,13 @@ final class SecurityControllerTest extends WebTestCase
         $client = static::createClient();
         $this->createTestUser($client->getContainer(), 'robin', 'correct-horse-battery-staple');
 
-        $client->request('GET', '/admin/login');
+        $client->request('GET', '/login');
         $client->submitForm('Anmelden', [
             '_username' => 'robin',
             '_password' => 'correct-horse-battery-staple',
         ]);
 
-        self::assertResponseRedirects('/admin');
+        self::assertResponseRedirects('/');
     }
 
     public function testLoginWithWrongPasswordShowsError(): void
@@ -84,7 +84,7 @@ final class SecurityControllerTest extends WebTestCase
         $client = static::createClient();
         $this->createTestUser($client->getContainer(), 'robin', 'correct-horse-battery-staple');
 
-        $client->request('GET', '/admin/login');
+        $client->request('GET', '/login');
         $client->submitForm('Anmelden', [
             '_username' => 'robin',
             '_password' => 'wrong-password',
@@ -102,9 +102,9 @@ final class SecurityControllerTest extends WebTestCase
         // Default 'main', der hier nicht existiert -> Token wird nicht erkannt.
         $client->loginUser($user, 'admin');
 
-        $client->request('GET', '/admin/login');
+        $client->request('GET', '/login');
 
-        self::assertResponseRedirects('/admin');
+        self::assertResponseRedirects('/');
     }
 
     private function createTestUser(\Psr\Container\ContainerInterface $container, string $username, string $password): User

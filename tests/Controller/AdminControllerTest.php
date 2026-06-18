@@ -11,22 +11,22 @@ final class AdminControllerTest extends WebTestCase
     public function testDashboardRedirectsAnonymousToLogin(): void
     {
         $client = static::createClient();
-        $client->request('GET', '/admin');
+        $client->request('GET', '/');
 
-        self::assertResponseRedirects('/admin/login');
+        self::assertResponseRedirects('/login');
     }
 
     public function testStatusEndpointRejectsAnonymous(): void
     {
         $client = static::createClient();
-        $client->request('GET', '/admin/status');
+        $client->request('GET', '/status');
 
-        // Symfony redirected anonymous zu /admin/login (302), nicht 401.
+        // Symfony redirected anonymous zu /login (302), nicht 401.
         // Location ist eine absolute URL, daher Pfad-Vergleich statt isRedirect().
         $response = $client->getResponse();
         $location = (string) $response->headers->get('Location', '');
         self::assertTrue(
-            ($response->isRedirect() && '/admin/login' === parse_url($location, PHP_URL_PATH))
+            ($response->isRedirect() && '/login' === parse_url($location, PHP_URL_PATH))
             || 401 === $response->getStatusCode(),
             'Status-Endpoint sollte fuer Anonyme geblockt sein',
         );
@@ -35,7 +35,7 @@ final class AdminControllerTest extends WebTestCase
     public function testRestartRequiresPostMethod(): void
     {
         $client = static::createClient();
-        $client->request('GET', '/admin/restart');
+        $client->request('GET', '/restart');
 
         // Anonymous GET landet entweder bei 405 (method) oder Login-Redirect
         $status = $client->getResponse()->getStatusCode();
