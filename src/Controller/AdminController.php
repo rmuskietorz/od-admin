@@ -22,7 +22,7 @@ final class AdminController extends AbstractController
     ) {
     }
 
-    #[Route(path: '/admin/audit', name: 'app_audit', methods: ['GET'])]
+    #[Route(path: '/audit', name: 'app_audit', methods: ['GET'])]
     public function audit(): Response
     {
         return $this->render('admin/audit.html.twig', [
@@ -30,7 +30,7 @@ final class AdminController extends AbstractController
         ]);
     }
 
-    #[Route(path: '/admin', name: 'app_dashboard', methods: ['GET'])]
+    #[Route(path: '/', name: 'app_dashboard', methods: ['GET'])]
     public function dashboard(): Response
     {
         return $this->render('admin/dashboard.html.twig', [
@@ -38,13 +38,13 @@ final class AdminController extends AbstractController
         ]);
     }
 
-    #[Route(path: '/admin/status', name: 'app_status', methods: ['GET'])]
+    #[Route(path: '/status', name: 'app_status', methods: ['GET'])]
     public function status(): JsonResponse
     {
         return new JsonResponse($this->docker->status());
     }
 
-    #[Route(path: '/admin/restart', name: 'app_restart', methods: ['POST'])]
+    #[Route(path: '/restart', name: 'app_restart', methods: ['POST'])]
     public function restart(): JsonResponse
     {
         $proc = $this->docker->restart();
@@ -57,7 +57,7 @@ final class AdminController extends AbstractController
         ], $proc->isSuccessful() ? 200 : 500);
     }
 
-    #[Route(path: '/admin/update', name: 'app_update', methods: ['POST'])]
+    #[Route(path: '/update', name: 'app_update', methods: ['POST'])]
     public function update(): JsonResponse
     {
         $pull = $this->docker->updateImage();
@@ -86,7 +86,7 @@ final class AdminController extends AbstractController
      * Dashboard sichtbar ist. Laeuft ueber od-admin -> beide --env-file
      * (Image/Origins + OAuth-Token) bleiben erhalten.
      */
-    #[Route(path: '/admin/update/stream', name: 'app_update_stream', methods: ['GET'])]
+    #[Route(path: '/update/stream', name: 'app_update_stream', methods: ['GET'])]
     public function updateStream(): StreamedResponse
     {
         $response = new StreamedResponse(function (): void {
@@ -135,7 +135,7 @@ final class AdminController extends AbstractController
         return $response;
     }
 
-    #[Route(path: '/admin/logs', name: 'app_logs', methods: ['GET'])]
+    #[Route(path: '/logs', name: 'app_logs', methods: ['GET'])]
     public function logs(): StreamedResponse
     {
         $proc = $this->docker->logsFollow(200);

@@ -12,6 +12,11 @@ framework:
         # Sessions ins persistente var/data-Volume (Default waere tmpfs -> bei
         # jedem Container-Neustart ausgeloggt). Verzeichnis legt entrypoint.sh an.
         save_path: '%kernel.project_dir%/var/data/sessions'
+        # Eigener Cookie-Name (kein Clash mit anderen robmus.de-Apps) + Domain
+        # auf open-design.robmus.de -> SSO zwischen OD und Admin-Subdomain,
+        # ohne das Cookie an andere robmus.de-Seiten zu senden. Leer = host-only.
+        name: OD_SESSION
+        cookie_domain: '%env(default::COOKIE_DOMAIN)%'
         cookie_secure: auto
         cookie_samesite: lax
         cookie_path: '%env(default::COOKIE_PATH)%'

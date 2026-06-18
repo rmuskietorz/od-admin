@@ -274,7 +274,7 @@
             <a href="{{ path('app_dashboard') }}" class="{{ app.request.attributes.get('_route') == 'app_dashboard' ? 'active' : '' }}">Dashboard</a>
             <a href="{{ path('app_claude_login') }}" class="{{ app.request.attributes.get('_route') starts with 'app_claude' ? 'active' : '' }}">Claude Login</a>
             <a href="{{ path('app_audit') }}" class="{{ app.request.attributes.get('_route') == 'app_audit' ? 'active' : '' }}">Audit-Log</a>
-            <a href="/" target="_blank" class="ext">Open Design</a>
+            <a href="{{ od_public_url|default('/') }}" target="_blank" class="ext">Open Design</a>
         </nav>
         <div class="spacer"></div>
         <div class="who">

@@ -57,10 +57,10 @@ OD_REPO_HTTPS="${OD_REPO_HTTPS:-https://github.com/rmuskietorz/open-design.git}"
 OD_BRANCH="${OD_BRANCH:-claude-cli-deploy}"
 OD_IMAGE="${OD_IMAGE:-ghcr.io/rmuskietorz/open-design-claude:latest}"
 OD_DIR="${OD_DIR:-$(dirname "$SCRIPT_DIR")/open-design}"
-# Oeffentliche Domain: od-admin frontet Open Design unter EINER Domain.
-DEFAULT_DOMAIN="${DEFAULT_DOMAIN:-open-design.robmus.de}"
-OD_DOMAIN="${OD_DOMAIN:-$DEFAULT_DOMAIN}"
-ADMIN_DOMAIN="${ADMIN_DOMAIN:-$DEFAULT_DOMAIN}"
+# Open Design auf der Haupt-Domain, Admin auf einer Subdomain DAVON (gemeinsamer
+# Eltern -> SSO-Cookie ohne Leak an andere robmus.de-Seiten).
+OD_DOMAIN="${OD_DOMAIN:-open-design.robmus.de}"
+ADMIN_DOMAIN="${ADMIN_DOMAIN:-admin.open-design.robmus.de}"
 [ -f "$STATE_FILE" ] && . "$STATE_FILE"
 
 _save_state() {
@@ -211,8 +211,11 @@ setup_env_admin() {
     print_header "od-admin .env.local"
     print_sep
     local envlocal="$SCRIPT_DIR/.env.local" envmain="$SCRIPT_DIR/.env"
-    ADMIN_DOMAIN=$(ask_default "Admin-Domain (TRUSTED_HOSTS)" "$ADMIN_DOMAIN")
-    local domain_esc; domain_esc=$(printf '%s' "$ADMIN_DOMAIN" | sed 's/\./\\./g')
+    OD_DOMAIN=$(ask_default "OD-Domain (Open Design)" "$OD_DOMAIN")
+    ADMIN_DOMAIN=$(ask_default "Admin-Domain (Subdomain von OD)" "$ADMIN_DOMAIN")
+    local od_esc admin_esc
+    od_esc=$(printf '%s' "$OD_DOMAIN" | sed 's/\./\\./g')
+    admin_esc=$(printf '%s' "$ADMIN_DOMAIN" | sed 's/\./\\./g')
     if [ -f "$envlocal" ]; then
         backup_file "$envlocal"
         confirm "Bestehende .env.local ueberschreiben?" || { print_info "Uebersprungen."; return 0; }
@@ -237,12 +240,17 @@ TTYD_SHARED_TOKEN=$ttyd_token
 
 DOCKER_HOST=unix:///var/run/docker.sock
 
-# Session-Cookie unter / (OD-Proxy liegt auf /, nicht /admin) — siehe DEBT-002.
+# Session-Cookie unter / fuer beide Subdomains.
 COOKIE_PATH=/
+# Cookie-Domain = OD-Domain (gemeinsamer Eltern von OD + admin.OD) -> Single-
+# Sign-On zwischen beiden, OHNE an andere robmus.de-Seiten zu senden.
+COOKIE_DOMAIN=$OD_DOMAIN
+# "Open Design"-Link im Admin-Header zeigt auf die OD-Subdomain.
+OD_PUBLIC_URL=https://$OD_DOMAIN
 
-# localhost/127.0.0.1 muessen drin bleiben — sonst lehnt Symfony den
-# Container-Healthcheck (Host 127.0.0.1) mit 400 ab → unhealthy.
-TRUSTED_HOSTS=^($domain_esc|localhost|127\.0\.0\.1)\$
+# OD- + Admin-Domain + localhost (Healthcheck nutzt /healthz ohne Symfony,
+# braucht hier nichts, aber localhost/127.0.0.1 schaden nicht).
+TRUSTED_HOSTS=^($od_esc|$admin_esc|localhost|127\.0\.0\.1)\$
 TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
 EOF
     unset app_secret ttyd_token
@@ -298,19 +306,18 @@ setup_finish() {
     else
         print_err "OD-Server : /api/health nicht erreichbar"
     fi
-    local p; p=$(grep -E '^OD_ADMIN_PORT=' "$SCRIPT_DIR/.env" 2>/dev/null | cut -d= -f2); p="${p:-8082}"
-    if curl -sf "http://127.0.0.1:${p}/admin/login" >/dev/null 2>&1; then
-        print_ok "od-admin  : /admin/login ok (Port $p)"
+    local p; p=$(grep -E '^OD_ADMIN_PORT=' "$SCRIPT_DIR/.env" 2>/dev/null | cut -d= -f2); p="${p:-8086}"
+    if curl -sf "http://127.0.0.1:${p}/healthz" >/dev/null 2>&1; then
+        print_ok "od-admin  : /healthz ok (Port $p)"
     else
-        print_err "od-admin  : /admin/login nicht erreichbar (Port $p)"
+        print_err "od-admin  : /healthz nicht erreichbar (Port $p)"
     fi
     echo ""
     echo -e "  ${BOLD}${CYAN}Naechste Schritte:${RESET}"
-    echo "    A. Reverse-Proxy + TLS: Menuepunkt 92 (nginx vHost) → 93 (SSL/certbot)."
-    echo "    B. Claude OAuth (Abo-Token, KEIN API-Key):"
-    echo "       1. https://${ADMIN_DOMAIN:-<admin-domain>}/admin oeffnen, einloggen."
-    echo "       2. ttyd-Terminal oeffnen → 'claude setup-token' laeuft automatisch."
-    echo "       3. URL autorisieren, Code zurueck ins Terminal (Token → claude_home-Volume)."
+    echo "    A. Reverse-Proxy + TLS: Menuepunkt 92 (nginx vHosts) → 93 (SSL/certbot)."
+    echo "    B. Dashboard: https://${ADMIN_DOMAIN:-<admin-domain>}/ oeffnen, einloggen."
+    echo "    C. Claude OAuth: Dashboard → Claude Login → Button-Flow (Abo-Token)."
+    echo "    D. Open Design: https://${OD_DOMAIN:-<od-domain>}/ (nach Login erreichbar)."
     echo ""
 }
 
@@ -340,7 +347,7 @@ setup_user() {
 _sudo() { if [ "$(id -u)" = 0 ]; then "$@"; else sudo "$@"; fi; }
 
 setup_nginx_vhost() {
-    print_header "nginx vHost einrichten (Host-Reverse-Proxy vor od-admin)"
+    print_header "nginx vHost einrichten (beide Subdomains)"
     print_sep
     if ! command -v nginx >/dev/null 2>&1; then
         print_err "nginx nicht installiert."
@@ -348,27 +355,30 @@ setup_nginx_vhost() {
             && { _sudo apt update && _sudo apt install -y nginx; } \
             || { print_info "Abgebrochen."; return 1; }
     fi
+    OD_DOMAIN=$(ask_default "OD-Domain (Open Design)" "$OD_DOMAIN")
     ADMIN_DOMAIN=$(ask_default "Admin-Domain" "$ADMIN_DOMAIN")
-    local port; port=$(grep -E '^OD_ADMIN_PORT=' "$SCRIPT_DIR/.env" 2>/dev/null | cut -d= -f2); port="${port:-8082}"
+    local port; port=$(grep -E '^OD_ADMIN_PORT=' "$SCRIPT_DIR/.env" 2>/dev/null | cut -d= -f2); port="${port:-8086}"
 
-    # Erreichbarkeit des Containers auf dem veroeffentlichten Host-Port.
-    if curl -sf "http://127.0.0.1:${port}/admin/login" >/dev/null 2>&1; then
+    # Erreichbarkeit des Containers (Health-Endpoint, keine Auth).
+    if curl -sf "http://127.0.0.1:${port}/healthz" >/dev/null 2>&1; then
         print_ok "od-admin erreichbar auf 127.0.0.1:${port}"
     else
-        print_err "od-admin NICHT erreichbar auf 127.0.0.1:${port} — erst Container starten (Punkt 87/6)."
+        print_err "od-admin NICHT erreichbar auf 127.0.0.1:${port} — erst Container starten (Punkt 87)."
         confirm "Trotzdem fortfahren?" || return 1
     fi
 
-    # DNS-Check (getent, kein dig noetig).
-    local server_ip dns_ip
+    # DNS-Check beider Domains (getent).
+    local server_ip d dns_ip
     server_ip=$(curl -sf4 https://ifconfig.me 2>/dev/null || echo "unbekannt")
-    dns_ip=$(getent hosts "$ADMIN_DOMAIN" 2>/dev/null | awk '{print $1}' | head -1)
-    if [ -n "$dns_ip" ] && [ "$dns_ip" = "$server_ip" ]; then
-        print_ok "DNS: $ADMIN_DOMAIN → $dns_ip (passt)"
-    else
-        print_info "DNS: $ADMIN_DOMAIN → ${dns_ip:-nicht aufloesbar} / Server-IP: $server_ip"
-        confirm "Trotzdem fortfahren?" || { print_info "Abgebrochen."; return 1; }
-    fi
+    for d in "$OD_DOMAIN" "$ADMIN_DOMAIN"; do
+        dns_ip=$(getent hosts "$d" 2>/dev/null | awk '{print $1}' | head -1)
+        if [ -n "$dns_ip" ] && [ "$dns_ip" = "$server_ip" ]; then
+            print_ok "DNS: $d → $dns_ip"
+        else
+            print_info "DNS: $d → ${dns_ip:-nicht aufloesbar} / Server-IP: $server_ip"
+        fi
+    done
+    confirm "Fortfahren?" || { print_info "Abgebrochen."; return 1; }
 
     local tpl="$SCRIPT_DIR/deploy/nginx/od-admin.example.conf"
     local dst="/etc/nginx/sites-available/od-admin"
@@ -378,24 +388,25 @@ setup_nginx_vhost() {
         print_info "Bestehenden vHost gesichert"
         confirm "Ueberschreiben?" || { print_info "Abgebrochen."; return 1; }
     fi
-    local domain_esc; domain_esc=$(printf '%s' "$ADMIN_DOMAIN" | sed 's/\./\\./g')
-    _sudo cp "$tpl" "$dst"
-    _sudo sed -i "s/admin\\.example\\.com/$domain_esc/g" "$dst"
-    # Upstream auf den tatsaechlich veroeffentlichten Host-Port korrigieren.
-    _sudo sed -i -E "s|server 127\\.0\\.0\\.1:8080;|server 127.0.0.1:${port};|" "$dst"
+    # Platzhalter ersetzen (server_name = beide Domains, Upstream-Port).
+    local tmp; tmp=$(mktemp)
+    sed -e "s|__SERVER_NAMES__|$OD_DOMAIN $ADMIN_DOMAIN|g" \
+        -e "s|__OD_ADMIN_PORT__|$port|g" \
+        "$tpl" > "$tmp"
+    _sudo cp "$tmp" "$dst"; rm -f "$tmp"
     _sudo ln -sf "$dst" /etc/nginx/sites-enabled/od-admin
     print_info "Teste nginx-Konfig..."
     if _sudo nginx -t; then
         _sudo systemctl reload nginx && print_ok "nginx neu geladen (HTTP aktiv, noch ohne TLS)."
-        print_info "Naechster Schritt: SSL-Zertifikat → Menuepunkt 93."
+        print_info "Naechster Schritt: SSL → Menuepunkt 93."
     else
-        print_err "nginx -t fehlgeschlagen — vHost pruefen, NICHT reloaded."; return 1
+        print_err "nginx -t fehlgeschlagen — NICHT reloaded."; return 1
     fi
     _save_state
 }
 
 setup_ssl() {
-    print_header "SSL-Zertifikat (Let's Encrypt / certbot)"
+    print_header "SSL-Zertifikat (Let's Encrypt, beide Subdomains)"
     print_sep
     if ! command -v certbot >/dev/null 2>&1; then
         print_err "certbot nicht installiert."
@@ -403,19 +414,20 @@ setup_ssl() {
             && { _sudo apt update && _sudo apt install -y certbot python3-certbot-nginx; } \
             || { print_info "Abgebrochen."; return 1; }
     fi
+    OD_DOMAIN=$(ask_default "OD-Domain" "$OD_DOMAIN")
     ADMIN_DOMAIN=$(ask_default "Admin-Domain" "$ADMIN_DOMAIN")
     if [ ! -e "/etc/nginx/sites-enabled/od-admin" ]; then
         print_err "Kein od-admin vHost aktiv — erst Menuepunkt 92."; return 1
     fi
     echo ""
-    print_info "certbot fordert das Zertifikat an und passt den vHost automatisch an."
+    print_info "certbot holt EIN Zertifikat fuer beide Domains und passt den vHost an."
     print_info "Beim ersten Mal: E-Mail eingeben + Redirect HTTP→HTTPS bestaetigen."
-    confirm "DNS-A-Record von $ADMIN_DOMAIN zeigt bereits auf diesen Server?" \
+    confirm "DNS-A-Records von $OD_DOMAIN UND $ADMIN_DOMAIN zeigen auf diesen Server?" \
         || { print_info "Erst DNS setzen, dann erneut."; return 1; }
-    if _sudo certbot --nginx -d "$ADMIN_DOMAIN"; then
+    if _sudo certbot --nginx -d "$OD_DOMAIN" -d "$ADMIN_DOMAIN"; then
         _sudo nginx -t && _sudo systemctl reload nginx
-        print_ok "TLS aktiv: https://$ADMIN_DOMAIN/admin"
-        print_info "Auto-Renewal laeuft via certbot.timer (systemctl status certbot.timer)."
+        print_ok "TLS aktiv: https://$OD_DOMAIN (Open Design) + https://$ADMIN_DOMAIN (Admin)"
+        print_info "Auto-Renewal laeuft via certbot.timer."
     else
         print_err "certbot fehlgeschlagen — Ausgabe oben pruefen (DNS? Port 80 offen?)."; return 1
     fi

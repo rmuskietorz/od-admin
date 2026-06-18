@@ -35,11 +35,13 @@ security:
                 target: app_login
             remember_me:
                 secret: '%kernel.secret%'
+                # Eigener Name (kollidiert nicht mit anderen robmus.de-Apps) und
+                # Domain auf open-design.robmus.de -> Cookie nur an OD + Admin-
+                # Subdomain, nicht an andere robmus.de-Seiten (SSO ohne Leak).
+                name: OD_REMEMBERME
                 lifetime: 604800   # 1 Woche
-                # Pfad / (nicht /admin): das nginx-Auth-Gate schuetzt auch den
-                # OD-Proxy unter /, dessen auth_request via remember-me bestehen
-                # koennen muss -> Cookie muss fuer / mitgesendet werden.
                 path: /
+                domain: '%env(default::COOKIE_DOMAIN)%'
             # Brute-Force-Schutz: nach 5 Fehlversuchen pro IP+Username 1 min
             # sperren, dann Token-Bucket-Backoff. Symfony 7 built-in.
             login_throttling:
@@ -47,9 +49,9 @@ security:
                 interval: '1 minute'
 
     access_control:
-        - { path: ^/admin/login$,  roles: PUBLIC_ACCESS }
-        - { path: ^/_auth_check$,  roles: PUBLIC_ACCESS }
-        - { path: ^/admin,         roles: ROLE_USER }
+        - { path: ^/login$,       roles: PUBLIC_ACCESS }
+        - { path: ^/_auth_check$, roles: PUBLIC_ACCESS }
+        - { path: ^/,             roles: ROLE_USER }
 
 when@test:
     security:

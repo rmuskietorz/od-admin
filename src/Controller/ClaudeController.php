@@ -13,7 +13,7 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 #[IsGranted('ROLE_USER')]
-#[Route(path: '/admin/claude', name: 'app_claude_')]
+#[Route(path: '/claude', name: 'app_claude_')]
 final class ClaudeController extends AbstractController
 {
     public function __construct(private readonly DockerClient $docker)

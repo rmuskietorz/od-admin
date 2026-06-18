@@ -1,5 +1,8 @@
 twig:
     default_path: '%kernel.project_dir%/templates'
+    globals:
+        # Oeffentliche OD-URL fuer den "Open Design"-Nav-Link (andere Subdomain).
+        od_public_url: '%env(default::OD_PUBLIC_URL)%'
 
 when@test:
     twig:
