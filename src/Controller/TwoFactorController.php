@@ -7,6 +7,7 @@ namespace App\Controller;
 use App\Entity\User;
 use App\Security\TwoFactorListener;
 use App\Security\TwoFactorService;
+use App\Service\AdminAuditLog;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -20,6 +21,7 @@ final class TwoFactorController extends AbstractController
     public function __construct(
         private readonly TwoFactorService $tfa,
         private readonly EntityManagerInterface $em,
+        private readonly AdminAuditLog $audit,
     ) {
     }
 
@@ -91,6 +93,7 @@ final class TwoFactorController extends AbstractController
                 $this->em->flush();
                 $session->remove('2fa_setup_secret');
                 $session->set(TwoFactorListener::SESSION_KEY, true);
+                $this->audit->log($user->getUserIdentifier(), '2FA aktiviert');
 
                 return $this->render('admin/2fa_codes.html.twig', ['codes' => $plainCodes]);
             } else {
@@ -125,6 +128,7 @@ final class TwoFactorController extends AbstractController
         $user->setTotpSecret(null);
         $user->setRecoveryCodes([]);
         $this->em->flush();
+        $this->audit->log($user->getUserIdentifier(), '2FA deaktiviert');
         $this->addFlash('info', '2FA wurde deaktiviert.');
 
         return $this->redirectToRoute('app_dashboard');

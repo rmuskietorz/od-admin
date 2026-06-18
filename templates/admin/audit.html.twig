@@ -13,6 +13,28 @@
     </div>
 
     <div class="card reveal" style="animation-delay:.06s">
+        <div class="card-title">Admin-Aktionen</div>
+        {% if admin_actions is empty %}
+            <div class="empty-state">Noch keine Aktionen.</div>
+        {% else %}
+            <div class="table-wrap">
+                <table class="data">
+                    <thead><tr><th>Zeit</th><th>User</th><th>Aktion</th></tr></thead>
+                    <tbody>
+                    {% for a in admin_actions %}
+                        <tr>
+                            <td class="text-mono" style="white-space: nowrap;">{{ a.at ? a.at|date('Y-m-d H:i:s') : '–' }}</td>
+                            <td><code>{{ a.user }}</code></td>
+                            <td>{{ a.action }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="card reveal" style="animation-delay:.1s">
         <div class="card-title">Login-Versuche</div>
 
         {% if attempts is empty %}

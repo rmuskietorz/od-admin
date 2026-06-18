@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Service\AdminAuditLog;
 use App\Service\DockerClient;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -16,8 +17,10 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 #[Route(path: '/claude', name: 'app_claude_')]
 final class ClaudeController extends AbstractController
 {
-    public function __construct(private readonly DockerClient $docker)
-    {
+    public function __construct(
+        private readonly DockerClient $docker,
+        private readonly AdminAuditLog $audit,
+    ) {
     }
 
     #[Route(path: '/login', name: 'login', methods: ['GET'])]
@@ -111,6 +114,7 @@ final class ClaudeController extends AbstractController
         $proc = $this->docker->persistOauthToken($token);
         $proc->run();
         $this->docker->stopTokenLogin();
+        $this->audit->log($this->getUser()?->getUserIdentifier() ?? 'unbekannt', 'Claude-OAuth-Token gesetzt');
 
         return new JsonResponse([
             'ok'              => $proc->isSuccessful(),
@@ -148,6 +152,7 @@ final class ClaudeController extends AbstractController
         $this->docker->stopTokenLogin();
         $proc = $this->docker->clearOauthToken();
         $proc->run();
+        $this->audit->log($this->getUser()?->getUserIdentifier() ?? 'unbekannt', 'Claude-OAuth-Token geloescht');
 
         return new JsonResponse(['ok' => $proc->isSuccessful()]);
     }

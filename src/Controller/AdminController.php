@@ -6,6 +6,7 @@ namespace App\Controller;
 
 use App\Entity\User;
 use App\Repository\LoginAttemptRepository;
+use App\Service\AdminAuditLog;
 use App\Service\DockerClient;
 use App\Service\UpdateHistory;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -22,14 +23,21 @@ final class AdminController extends AbstractController
         private readonly DockerClient $docker,
         private readonly LoginAttemptRepository $loginAttempts,
         private readonly UpdateHistory $updateHistory,
+        private readonly AdminAuditLog $audit,
     ) {
+    }
+
+    private function auditUser(): string
+    {
+        return $this->getUser()?->getUserIdentifier() ?? 'unbekannt';
     }
 
     #[Route(path: '/audit', name: 'app_audit', methods: ['GET'])]
     public function audit(): Response
     {
         return $this->render('admin/audit.html.twig', [
-            'attempts' => $this->loginAttempts->findRecent(100),
+            'attempts'      => $this->loginAttempts->findRecent(100),
+            'admin_actions' => $this->audit->recent(50),
         ]);
     }
 
@@ -57,6 +65,7 @@ final class AdminController extends AbstractController
     #[Route(path: '/restart', name: 'app_restart', methods: ['POST'])]
     public function restart(): JsonResponse
     {
+        $this->audit->log($this->auditUser(), 'OD-Container neu gestartet');
         $proc = $this->docker->restart();
         $proc->run();
 
@@ -70,6 +79,7 @@ final class AdminController extends AbstractController
     #[Route(path: '/update', name: 'app_update', methods: ['POST'])]
     public function update(): JsonResponse
     {
+        $this->audit->log($this->auditUser(), 'OD-Update (Pull + Recreate)');
         $pull = $this->docker->updateImage();
         $pull->run();
         if (!$pull->isSuccessful()) {
@@ -99,6 +109,9 @@ final class AdminController extends AbstractController
     #[Route(path: '/update/stream', name: 'app_update_stream', methods: ['GET'])]
     public function updateStream(): StreamedResponse
     {
+        // User vor dem Stream erfassen (im Closure ist der Security-Kontext weg).
+        $this->audit->log($this->auditUser(), 'OD-Update (Pull + Recreate, Live)');
+
         $response = new StreamedResponse(function (): void {
             $emit = static function (string $line): void {
                 echo 'data: '.str_replace("\n", '\\n', $line)."\n\n";

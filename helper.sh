@@ -1114,6 +1114,21 @@ case $option in
         ( crontab -l 2>/dev/null | grep -v 'deploy/scripts/backup.sh'; echo "$_cronline" ) | crontab - \
             && print_ok "Cron gesetzt: taeglich 03:30 -> /var/log/od-admin-backup.log" \
             || print_err "crontab-Setzen fehlgeschlagen (als root ausfuehren?)"
+        # logrotate fuer den Backup-Log (sonst waechst er unbegrenzt).
+        if [ -d /etc/logrotate.d ]; then
+            printf '%s\n' \
+                '/var/log/od-admin-backup.log {' \
+                '    weekly' \
+                '    rotate 8' \
+                '    compress' \
+                '    delaycompress' \
+                '    missingok' \
+                '    notifempty' \
+                '    copytruncate' \
+                '}' | _sudo tee /etc/logrotate.d/od-admin-backup >/dev/null \
+                && print_ok "logrotate: /etc/logrotate.d/od-admin-backup (woechentlich, 8x)" \
+                || print_info "logrotate-Regel nicht geschrieben (root noetig?)."
+        fi
         print_info "Aktive Crontab:"
         crontab -l 2>/dev/null | grep 'backup.sh' || true
         ;;
