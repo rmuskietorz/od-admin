@@ -116,7 +116,33 @@
                     <div class="k">Zwei-Faktor</div>
                     <div class="v"><span class="badge ok">aktiv</span></div>
                 </div>
+                <div class="stat">
+                    <div class="k">Recovery-Codes übrig</div>
+                    <div class="v">
+                        {% if recovery_codes_left <= 2 %}
+                            <span class="badge err">{{ recovery_codes_left }}</span>
+                        {% elseif recovery_codes_left <= 4 %}
+                            <span class="badge warn">{{ recovery_codes_left }}</span>
+                        {% else %}
+                            <span class="badge ok">{{ recovery_codes_left }}</span>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
+            {% if recovery_codes_left <= 2 %}
+                <p class="muted" style="margin-top: 0; color: var(--err, #f87171);">
+                    Nur noch {{ recovery_codes_left }} Recovery-Code(s) — bei Verlust der App droht Aussperren.
+                    Jetzt einen frischen Satz erzeugen.
+                </p>
+            {% endif %}
+            <form method="post" action="{{ path('app_2fa_recovery') }}" class="btn-row"
+                  onsubmit="return confirm('Neue Recovery-Codes erzeugen? Die alten werden ungültig.');"
+                  style="margin-bottom: 12px;">
+                <input type="text" name="code" class="form-input" inputmode="numeric"
+                       placeholder="Aktueller 6-stelliger Code" style="max-width: 240px;">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token('2fa_recovery') }}">
+                <button type="submit" class="btn">Recovery-Codes neu erzeugen</button>
+            </form>
             <form method="post" action="{{ path('app_2fa_disable') }}" class="btn-row"
                   onsubmit="return confirm('2FA wirklich deaktivieren?');">
                 <input type="text" name="code" class="form-input" inputmode="numeric"

@@ -56,12 +56,15 @@ final class AdminController extends AbstractController
             ? (int) (new \DateTimeImmutable())->diff($tokenExpiresAt)->format('%r%a')
             : null;
 
+        $twoFactor = $user instanceof User && $user->isTwoFactorEnabled();
+
         return $this->render('admin/dashboard.html.twig', [
-            'status'             => $status,
-            'two_factor_enabled' => $user instanceof User && $user->isTwoFactorEnabled(),
-            'update_history'     => $this->updateHistory->recent(6),
-            'token_expires_at'   => $tokenExpiresAt,
-            'token_days_left'    => $tokenDaysLeft,
+            'status'              => $status,
+            'two_factor_enabled'  => $twoFactor,
+            'recovery_codes_left' => $twoFactor && $user instanceof User ? \count($user->getRecoveryCodes()) : 0,
+            'update_history'      => $this->updateHistory->recent(6),
+            'token_expires_at'    => $tokenExpiresAt,
+            'token_days_left'     => $tokenDaysLeft,
         ]);
     }
 

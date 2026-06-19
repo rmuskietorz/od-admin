@@ -108,6 +108,36 @@ final class TwoFactorController extends AbstractController
         ]);
     }
 
+    /**
+     * Recovery-Codes neu erzeugen — verlangt einen gueltigen aktuellen TOTP-Code
+     * (eine gekaperte Session soll die Codes nicht still rotieren koennen).
+     * Schliesst die Lockout-Luecke: wer seine Codes aufgebraucht hat, holt sich
+     * hier einen frischen Satz, ohne 2FA aus- und wieder einschalten zu muessen.
+     */
+    #[Route(path: '/2fa/recovery/regenerate', name: 'app_2fa_recovery', methods: ['POST'])]
+    public function regenerateRecovery(Request $request): Response
+    {
+        $user = $this->user();
+        if (!$this->isCsrfTokenValid('2fa_recovery', (string) $request->request->get('_csrf_token'))) {
+            $this->addFlash('error', 'Ungueltiges Formular.');
+
+            return $this->redirectToRoute('app_dashboard');
+        }
+        if (!$user->isTwoFactorEnabled()
+            || !$this->tfa->verify((string) $user->getTotpSecret(), (string) $request->request->get('code', ''))) {
+            $this->addFlash('error', 'Recovery-Codes NICHT erneuert: Code fehlt/ungueltig.');
+
+            return $this->redirectToRoute('app_dashboard');
+        }
+
+        $plainCodes = $this->tfa->generateRecoveryCodes();
+        $user->setRecoveryCodes($this->tfa->hashRecoveryCodes($plainCodes));
+        $this->em->flush();
+        $this->audit->log($user->getUserIdentifier(), 'Recovery-Codes neu erzeugt');
+
+        return $this->render('admin/2fa_codes.html.twig', ['codes' => $plainCodes]);
+    }
+
     /** 2FA deaktivieren — verlangt einen gueltigen aktuellen Code. */
     #[Route(path: '/2fa/disable', name: 'app_2fa_disable', methods: ['POST'])]
     public function disable(Request $request): Response

@@ -61,6 +61,37 @@ final class TwoFactorControllerTest extends WebTestCase
         self::assertResponseStatusCodeSame(401);
     }
 
+    public function testRegenerateRecoveryRequiresValidCode(): void
+    {
+        $client = static::createClient();
+        $this->createUserWith2fa($client->getContainer(), 'robin', 'correct-horse-battery-staple');
+
+        $client->request('GET', '/login');
+        $client->submitForm('Anmelden', [
+            '_username' => 'robin',
+            '_password' => 'correct-horse-battery-staple',
+        ]);
+        $client->request('GET', '/2fa');
+        $client->submitForm('Bestätigen', ['code' => TOTP::createFromSecret(self::SECRET)->now()]);
+
+        // Falscher Code -> keine neuen Codes, zurueck aufs Dashboard.
+        $client->request('GET', '/');
+        $token = (string) $client->getCrawler()->filter('input[name="_csrf_token"]')->first()->attr('value');
+        $client->request('POST', '/2fa/recovery/regenerate', ['code' => '000000', '_csrf_token' => $token]);
+        self::assertResponseRedirects('/');
+
+        // Gueltiger Code -> frischer Satz Codes wird angezeigt.
+        $client->request('GET', '/');
+        $token = (string) $client->getCrawler()->filter('input[name="_csrf_token"]')->first()->attr('value');
+        $client->request('POST', '/2fa/recovery/regenerate', [
+            'code'        => TOTP::createFromSecret(self::SECRET)->now(),
+            '_csrf_token' => $token,
+        ]);
+        self::assertResponseIsSuccessful();
+        self::assertSelectorTextContains('h1', '2FA aktiv');
+        self::assertCount(8, $client->getCrawler()->filter('code.text-mono'));
+    }
+
     private function createUserWith2fa(\Psr\Container\ContainerInterface $container, string $username, string $password): User
     {
         /** @var EntityManagerInterface $em */
